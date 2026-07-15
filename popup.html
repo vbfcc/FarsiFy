@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @font-face {
+      font-family: 'Vazirmatn';
+      src: url('fonts/Vazirmatn-Regular.woff2') format('woff2');
+      font-weight: normal;
+    }
+    @font-face {
+      font-family: 'Vazirmatn';
+      src: url('fonts/Vazirmatn-Bold.woff2') format('woff2');
+      font-weight: bold;
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 300px;
+      padding: 0;
+      margin: 0;
+      font-family: 'Vazirmatn', Tahoma, Arial, sans-serif;
+      background: #f4f5f9;
+      color: #222;
+    }
+    .header {
+      background: linear-gradient(135deg, #3b59b6, #5a3bb6);
+      color: #fff;
+      padding: 14px 16px;
+      font-size: 15px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header .page-badge {
+      font-size: 10.5px;
+      font-weight: normal;
+      background: rgba(255,255,255,0.18);
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    .section {
+      background: #fff;
+      margin: 10px 12px;
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .row + .row { margin-top: 12px; }
+    .label {
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .sub {
+      font-size: 10.5px;
+      color: #888;
+      margin-top: 2px;
+      font-weight: normal;
+    }
+    /* کلید روشن/خاموش */
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+    .switch input { display: none; }
+    .slider {
+      position: absolute; inset: 0;
+      background-color: #ccc;
+      transition: .25s;
+      border-radius: 24px;
+      cursor: pointer;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 18px; width: 18px;
+      left: 3px; bottom: 3px;
+      background: #fff;
+      transition: .25s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    input:checked + .slider { background-color: #4CAF50; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    /* منوی فونت */
+    select {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    select:focus { outline: 2px solid #3b59b6; }
+    /* بخش متن راست‌چین */
+    textarea {
+      width: 100%;
+      margin-top: 8px;
+      min-height: 64px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 12.5px;
+      resize: vertical;
+      direction: rtl;
+      background: #fafafa;
+    }
+    textarea:focus { outline: 2px solid #3b59b6; }
+    input[type="url"] {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 12.5px;
+      direction: ltr;
+      text-align: left;
+      background: #fafafa;
+      box-sizing: border-box;
+    }
+    input[type="url"]:focus { outline: 2px solid #3b59b6; }
+    button.primary {
+      width: 100%;
+      margin-top: 8px;
+      padding: 9px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3b59b6, #5a3bb6);
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    button.primary:hover { opacity: 0.88; }
+    button.primary:disabled { background: #bbb; cursor: not-allowed; }
+    .hint {
+      font-size: 10px;
+      color: #999;
+      margin-top: 6px;
+      line-height: 1.6;
+      text-align: center;
+    }
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: #aaa;
+      padding: 4px 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span>فارسی‌ساز</span>
+    <span class="page-badge" id="pageStatus">در حال بررسی...</span>
+  </div>
+
+  <!-- بخش ۱: فونت -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <div class="label">تغییر فونت فارسی</div>
+        <div class="sub">فقط روی صفحات فارسی اعمال میشه</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="fontToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <select id="fontSelect">
+      <option value="Vazirmatn">وزیرمتن (Vazirmatn)</option>
+      <option value="Shabnam">شبنم (Shabnam)</option>
+      <option value="Sahel">ساحل (Sahel)</option>
+      <option value="Samim">صمیم (Samim)</option>
+    </select>
+  </div>
+
+  <!-- بخش ۲: راست‌چین -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <div class="label">راست‌چین کردن صفحه</div>
+        <div class="sub">جهت کل صفحه فعلی رو راست‌به‌چپ می‌کنه</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="rtlToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- بخش ۳: متن راست‌چین در تب جدید -->
+  <div class="section">
+    <div class="label">📄 نمایش متن راست‌چین</div>
+    <textarea id="pasteArea" placeholder="متنت رو اینجا paste کن..."></textarea>
+    <button class="primary" id="openViewer">باز کردن در تب جدید</button>
+    <div class="hint">
+      💡 راه سریع‌تر: توی هر سایتی متن رو انتخاب کن، راست‌کلیک کن و «نمایش راست‌چین» رو بزن
+    </div>
+  </div>
+
+  <!-- بخش ۴: بارگذاری فایل md از آدرس -->
+  <div class="section">
+    <div class="label">📥 بارگذاری فایل md</div>
+    <input type="url" id="mdUrlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+    <button class="primary" id="loadMdUrl">بارگذاری و نمایش</button>
+  </div>
+
+  <div class="footer">تغییرات فوراً اعمال میشه — بدون رفرش</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

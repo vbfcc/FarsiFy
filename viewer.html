@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>متن راست‌چین</title>
+  <style>
+    @font-face { font-family: 'Vazirmatn'; src: url('fonts/Vazirmatn-Regular.woff2') format('woff2'); font-weight: normal; }
+    @font-face { font-family: 'Vazirmatn'; src: url('fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight: bold; }
+    @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam.woff2') format('woff2'); font-weight: normal; }
+    @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam-Bold.woff2') format('woff2'); font-weight: bold; }
+    @font-face { font-family: 'Sahel'; src: url('fonts/Sahel.woff2') format('woff2'); font-weight: normal; }
+    @font-face { font-family: 'Sahel'; src: url('fonts/Sahel-Bold.woff2') format('woff2'); font-weight: bold; }
+    @font-face { font-family: 'Samim'; src: url('fonts/Samim.woff2') format('woff2'); font-weight: normal; }
+    @font-face { font-family: 'Samim'; src: url('fonts/Samim-Bold.woff2') format('woff2'); font-weight: bold; }
+
+    * { box-sizing: border-box; }
+
+    /* ---------- تم‌ها: پیش‌فرض روشن، پیرو سیستم، یا انتخاب دستی ---------- */
+    :root {
+      --bg: #eef0f5;
+      --toolbar-bg: #fff;
+      --toolbar-border: #e2e4ea;
+      --toolbar-shadow: rgba(0,0,0,0.04);
+      --text: #333;
+      --sub-text: #555;
+      --border: #ddd;
+      --input-bg: #fafafa;
+      --btn-bg: #fafafa;
+      --btn-hover-bg: #eee;
+      --page-bg: #fff;
+      --page-shadow: rgba(0,0,0,0.07);
+      --content-text: #1c1c1e;
+      --placeholder-text: #b5b5bd;
+      --code-bg: #f4f4f7;
+      --code-border: #dcdce3;
+      --code-text: #1c1c1e;
+      --blockquote-border: #c8c9d6;
+      --blockquote-text: #666;
+      --link-color: #3b59b6;
+      --toast-bg: #333;
+      --toast-text: #fff;
+      --accent: #3b59b6;
+      --accent-hover: #324c9e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181d;
+        --toolbar-bg: #1f2128;
+        --toolbar-border: #33353e;
+        --toolbar-shadow: rgba(0,0,0,0.3);
+        --text: #d8d9e0;
+        --sub-text: #a7a9b6;
+        --border: #3a3c46;
+        --input-bg: #262832;
+        --btn-bg: #262832;
+        --btn-hover-bg: #30323d;
+        --page-bg: #1f2128;
+        --page-shadow: rgba(0,0,0,0.45);
+        --content-text: #e7e7ee;
+        --placeholder-text: #6d6f7c;
+        --code-bg: #14151a;
+        --code-border: #34363f;
+        --code-text: #e2e3ea;
+        --blockquote-border: #454754;
+        --blockquote-text: #9d9fac;
+        --link-color: #7f9dff;
+        --toast-bg: #eaeaf0;
+        --toast-text: #222;
+        --accent: #5470d6;
+        --accent-hover: #6b84e0;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #16181d;
+      --toolbar-bg: #1f2128;
+      --toolbar-border: #33353e;
+      --toolbar-shadow: rgba(0,0,0,0.3);
+      --text: #d8d9e0;
+      --sub-text: #a7a9b6;
+      --border: #3a3c46;
+      --input-bg: #262832;
+      --btn-bg: #262832;
+      --btn-hover-bg: #30323d;
+      --page-bg: #1f2128;
+      --page-shadow: rgba(0,0,0,0.45);
+      --content-text: #e7e7ee;
+      --placeholder-text: #6d6f7c;
+      --code-bg: #14151a;
+      --code-border: #34363f;
+      --code-text: #e2e3ea;
+      --blockquote-border: #454754;
+      --blockquote-text: #9d9fac;
+      --link-color: #7f9dff;
+      --toast-bg: #eaeaf0;
+      --toast-text: #222;
+      --accent: #5470d6;
+      --accent-hover: #6b84e0;
+    }
+    :root[data-theme="light"] {
+      --bg: #eef0f5;
+      --toolbar-bg: #fff;
+      --toolbar-border: #e2e4ea;
+      --toolbar-shadow: rgba(0,0,0,0.04);
+      --text: #333;
+      --sub-text: #555;
+      --border: #ddd;
+      --input-bg: #fafafa;
+      --btn-bg: #fafafa;
+      --btn-hover-bg: #eee;
+      --page-bg: #fff;
+      --page-shadow: rgba(0,0,0,0.07);
+      --content-text: #1c1c1e;
+      --placeholder-text: #b5b5bd;
+      --code-bg: #f4f4f7;
+      --code-border: #dcdce3;
+      --code-text: #1c1c1e;
+      --blockquote-border: #c8c9d6;
+      --blockquote-text: #666;
+      --link-color: #3b59b6;
+      --toast-bg: #333;
+      --toast-text: #fff;
+      --accent: #3b59b6;
+      --accent-hover: #324c9e;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Vazirmatn', Tahoma, sans-serif;
+      min-height: 100vh;
+      transition: background .2s, color .2s;
+    }
+    /* نوار ابزار بالای صفحه */
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      box-shadow: 0 1px 4px var(--toolbar-shadow);
+    }
+    .toolbar .brand {
+      font-weight: bold;
+      font-size: 14px;
+      color: var(--accent);
+      margin-left: auto;
+    }
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--sub-text);
+    }
+    select, input[type="range"] {
+      font-family: inherit;
+      font-size: 12.5px;
+    }
+    select {
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--input-bg);
+      color: var(--text);
+      cursor: pointer;
+    }
+    input[type="range"] { width: 110px; cursor: pointer; accent-color: var(--accent); }
+    input[type="url"] {
+      direction: ltr;
+      text-align: left;
+      width: 240px;
+      max-width: 45vw;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--input-bg);
+      color: var(--text);
+    }
+    input[type="url"]:focus { outline: 2px solid var(--accent); }
+    .size-val { min-width: 34px; text-align: center; color: var(--accent); font-weight: bold; }
+    button {
+      font-family: inherit;
+      font-size: 12.5px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--btn-bg);
+      color: var(--text);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover { background: var(--btn-hover-bg); }
+    button.accent {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    button.accent:hover { background: var(--accent-hover); }
+    button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* برگه متن */
+    .page {
+      max-width: 800px;
+      margin: 28px auto 60px;
+      background: var(--page-bg);
+      border-radius: 14px;
+      box-shadow: 0 2px 14px var(--page-shadow);
+      padding: 40px 48px;
+      min-height: 400px;
+    }
+    #content, #preview {
+      direction: rtl;
+      text-align: right;
+      font-size: 18px;
+      line-height: 2.1;
+      color: var(--content-text);
+      word-wrap: break-word;
+      outline: none;
+      min-height: 320px;
+    }
+    #content {
+      white-space: pre-wrap;
+    }
+    #preview { display: none; }
+    #preview.visible { display: block; }
+    #content.hidden { display: none; }
+    #content:empty:before {
+      content: "متنت رو اینجا بنویس یا paste کن...";
+      color: var(--placeholder-text);
+    }
+    #preview p { margin: 0 0 0.9em; }
+    #preview h1, #preview h2, #preview h3, #preview h4, #preview h5, #preview h6 {
+      margin: 1em 0 0.5em;
+      line-height: 1.5;
+    }
+    #preview ul, #preview ol {
+      margin: 0 0 0.9em;
+      padding-inline-start: 1.6em;
+    }
+    #preview blockquote {
+      margin: 0 0 0.9em;
+      padding: 4px 14px;
+      border-inline-start: 3px solid var(--blockquote-border);
+      color: var(--blockquote-text);
+    }
+    #preview hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.2em 0;
+    }
+    #preview a { color: var(--link-color); }
+
+    /* ---------- جدول‌های مارک‌داون ---------- */
+    #preview .table-wrap {
+      overflow-x: auto;
+      margin: 0 0 0.9em;
+    }
+    #preview table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88em;
+    }
+    #preview th, #preview td {
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      text-align: right;
+      vertical-align: top;
+    }
+    #preview thead th {
+      background: var(--code-bg);
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    #preview tbody tr:nth-child(even) {
+      background: rgba(127,127,127,0.06);
+    }
+
+    /* ---------- نقل‌قول‌های چندخطی (با لیست/پاراگراف تودرتو) ---------- */
+    #preview blockquote > *:first-child { margin-top: 0; }
+    #preview blockquote > *:last-child { margin-bottom: 0; }
+
+    /* ---------- کد همیشه چپ‌به‌راست، حتی داخل متن راست‌چین ---------- */
+    #preview code {
+      direction: ltr;
+      unicode-bidi: isolate;
+      font-family: 'Consolas', 'SFMono-Regular', Menlo, Monaco, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--code-text);
+    }
+    #preview pre.code-block {
+      direction: ltr;
+      text-align: left;
+      unicode-bidi: isolate;
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin: 0 0 0.9em;
+      overflow-x: auto;
+      font-family: 'Consolas', 'SFMono-Regular', Menlo, Monaco, monospace;
+      font-size: 0.82em;
+      line-height: 1.6;
+    }
+    #preview pre.code-block code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 1em;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 50%;
+      transform: translateX(50%);
+      background: var(--toast-bg);
+      color: var(--toast-text);
+      padding: 9px 20px;
+      border-radius: 24px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    /* موقع پرینت فقط متن چاپ بشه، همیشه با تم روشن */
+    @media print {
+      .toolbar, .toast { display: none !important; }
+      body { background: #fff !important; color: #1c1c1e !important; }
+      .page { box-shadow: none; margin: 0; max-width: 100%; border-radius: 0; background: #fff !important; }
+      #content, #preview { color: #1c1c1e !important; }
+      #preview code, #preview pre.code-block { background: #f4f4f7 !important; color: #1c1c1e !important; }
+      #preview th, #preview td { border-color: #ccc !important; }
+      #preview thead th { background: #f4f4f7 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="control">
+      <span>فونت:</span>
+      <select id="fontSelect">
+        <option value="Vazirmatn">وزیرمتن</option>
+        <option value="Shabnam">شبنم</option>
+        <option value="Sahel">ساحل</option>
+        <option value="Samim">صمیم</option>
+      </select>
+    </div>
+    <div class="control">
+      <span>اندازه:</span>
+      <input type="range" id="sizeRange" min="13" max="34" value="18">
+      <span class="size-val" id="sizeVal">18</span>
+    </div>
+    <div class="control">
+      <span>🌙 تم:</span>
+      <select id="themeSelect">
+        <option value="system">سیستم</option>
+        <option value="light">روشن</option>
+        <option value="dark">تاریک</option>
+      </select>
+    </div>
+    <button id="previewBtn">👁️ پیش‌نمایش مارک‌داون</button>
+    <button id="copyBtn">📋 کپی متن</button>
+    <button id="printBtn">🖨️ چاپ / PDF</button>
+    <button class="accent" id="clearBtn">🗑️ پاک کردن</button>
+    <div class="brand">فارسی‌ساز</div>
+  </div>
+
+  <div class="toolbar" style="border-top: 1px solid var(--toolbar-border);">
+    <div class="control">
+      <span>📥 بارگذاری .md از:</span>
+      <input type="url" id="urlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+    </div>
+    <button class="accent" id="loadUrlBtn">بارگذاری</button>
+  </div>
+
+  <div class="page">
+    <div id="content" contenteditable="true"></div>
+    <div id="preview" dir="rtl"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="viewer.js"></script>
+</body>
+</html>

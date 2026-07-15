@@ -1,0 +1,75 @@
+/* ============================================
+   فونت‌ها داخل خود اکستنشن هستن (بدون نیاز به اینترنت)
+   ============================================ */
+
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('fonts/Vazirmatn-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Shabnam';
+  src: url('fonts/Shabnam.woff2') format('woff2');
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Shabnam';
+  src: url('fonts/Shabnam-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sahel';
+  src: url('fonts/Sahel.woff2') format('woff2');
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sahel';
+  src: url('fonts/Sahel-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Samim';
+  src: url('fonts/Samim.woff2') format('woff2');
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Samim';
+  src: url('fonts/Samim-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-display: swap;
+}
+
+/* ============================================
+   اعمال فونت — با محافظت از آیکون‌ها
+   آیکون‌فونت‌ها (FontAwesome، Material Icons و...)
+   نباید فونتشون عوض بشه وگرنه به شکل مربع در میان
+   ============================================ */
+
+html.persian-font-active body,
+html.persian-font-active body *:not(i):not(svg):not(path):not(g):not(use):not(code):not(pre):not(kbd):not(samp):not([class*="icon"]):not([class*="Icon"]):not([class*="fa-"]):not(.fa):not(.fas):not(.far):not(.fab):not(.fal):not(.fad):not(.material-icons):not(.material-symbols-outlined):not(.material-symbols-rounded):not(.material-symbols-sharp):not(.glyphicon):not([class*="emoji"]) {
+  font-family: var(--pf-selected-font, 'Vazirmatn'), Tahoma, Arial, sans-serif !important;
+}
+
+/* ============================================
+   راست‌چین کردن صفحه
+   ============================================ */
+
+html.persian-rtl-active body {
+  direction: rtl !important;
+  text-align: right !important;
+}

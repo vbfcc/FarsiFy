@@ -10,7 +10,7 @@
   let tabIdReady = null;
 
   const DEFAULTS = {
-    fontEnabled: true,
+    fontEnabled: false,
     rtlEnabled: false,
     selectedFont: "Vazirmatn"
   };

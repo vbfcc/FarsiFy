@@ -6,9 +6,11 @@ const pasteArea = document.getElementById("pasteArea");
 const openViewerBtn = document.getElementById("openViewer");
 const mdUrlInput = document.getElementById("mdUrlInput");
 const loadMdUrlBtn = document.getElementById("loadMdUrl");
+const mdFileInput = document.getElementById("mdFileInput");
+const loadMdFileBtn = document.getElementById("loadMdFile");
 
 const DEFAULTS = {
-  fontEnabled: true,
+  fontEnabled: false,
   rtlEnabled: false,
   selectedFont: "Vazirmatn"
 };
@@ -134,4 +136,22 @@ async function loadMdFromUrl() {
 loadMdUrlBtn.addEventListener("click", loadMdFromUrl);
 mdUrlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadMdFromUrl();
+});
+
+// ---------- بارگذاری فایل md از سیستم (فایل‌های لوکال) ----------
+loadMdFileBtn.addEventListener("click", () => mdFileInput.click());
+
+mdFileInput.addEventListener("change", async () => {
+  const file = mdFileInput.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    chrome.storage.local.set({ viewerText: text, viewerPreview: true }, () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+    });
+  } catch (err) {
+    alert(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+  } finally {
+    mdFileInput.value = "";
+  }
 });

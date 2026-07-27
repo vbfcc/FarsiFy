@@ -10,6 +10,8 @@ const printBtn = document.getElementById("printBtn");
 const clearBtn = document.getElementById("clearBtn");
 const urlInput = document.getElementById("urlInput");
 const loadUrlBtn = document.getElementById("loadUrlBtn");
+const mdFileInput = document.getElementById("mdFileInput");
+const loadFileBtn = document.getElementById("loadFileBtn");
 const toast = document.getElementById("toast");
 
 let previewMode = false;
@@ -378,4 +380,22 @@ async function loadFromUrl() {
 loadUrlBtn.addEventListener("click", loadFromUrl);
 urlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadFromUrl();
+});
+
+// ---------- بارگذاری فایل .md از سیستم (فایل‌های لوکال) ----------
+loadFileBtn.addEventListener("click", () => mdFileInput.click());
+
+mdFileInput.addEventListener("change", async () => {
+  const file = mdFileInput.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    content.textContent = text;
+    setPreviewMode(true);
+    showToast("فایل با موفقیت بارگذاری شد ✅");
+  } catch (err) {
+    showToast(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+  } finally {
+    mdFileInput.value = "";
+  }
 });

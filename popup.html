@@ -207,11 +207,14 @@
     </div>
   </div>
 
-  <!-- بخش ۴: بارگذاری فایل md از آدرس -->
+  <!-- بخش ۴: بارگذاری فایل md از آدرس یا از سیستم -->
   <div class="section">
     <div class="label">📥 بارگذاری فایل md</div>
     <input type="url" id="mdUrlInput" placeholder="https://... یا http://localhost:PORT/file.md">
     <button class="primary" id="loadMdUrl">بارگذاری و نمایش</button>
+    <input type="file" id="mdFileInput" accept=".md,.markdown,.txt" style="display:none">
+    <button class="primary" id="loadMdFile" style="margin-top:8px; background:#555">📂 انتخاب فایل از سیستم</button>
+    <div class="hint">برای فایل‌های روی سیستمت (مثل E:\...) از این دکمه استفاده کن؛ مسیر فایل مستقیم پشتیبانی نمی‌شه</div>
   </div>
 
   <div class="footer">تغییرات فوراً اعمال میشه — بدون رفرش</div>

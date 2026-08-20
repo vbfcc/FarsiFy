@@ -12,7 +12,19 @@ const urlInput = document.getElementById("urlInput");
 const loadUrlBtn = document.getElementById("loadUrlBtn");
 const mdFileInput = document.getElementById("mdFileInput");
 const loadFileBtn = document.getElementById("loadFileBtn");
+const mdFolderInput = document.getElementById("mdFolderInput");
+const loadFolderBtn = document.getElementById("loadFolderBtn");
+const fileHeader = document.getElementById("fileHeader");
+const fileChipList = document.getElementById("fileChipList");
+const currentFileControl = document.getElementById("currentFileControl");
+const currentFileNameEl = document.getElementById("currentFileName");
+const permBanner = document.getElementById("permBanner");
+const permBannerText = document.getElementById("permBannerText");
+const permRetryBtn = document.getElementById("permRetryBtn");
 const toast = document.getElementById("toast");
+const selToolbar = document.getElementById("selToolbar");
+const selLtrBtn = document.getElementById("selLtrBtn");
+const selCodeBtn = document.getElementById("selCodeBtn");
 
 let previewMode = false;
 
@@ -43,22 +55,33 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // ---------- متن ذخیره‌شده رو بخون و نشون بده ----------
-chrome.storage.local.get({ viewerText: "", viewerPreview: false, selectedFont: "Vazirmatn" }, (data) => {
-  if (data.viewerText) {
-    content.textContent = data.viewerText;
-    // بعد از نمایش، پاکش کن که دفعه بعد تب خالی باز بشه
-    chrome.storage.local.remove(["viewerText", "viewerPreview"]);
+chrome.storage.local.get(
+  { viewerText: "", viewerPreview: false, viewerFileName: "", selectedFont: "Vazirmatn", pendingFolderFiles: [] },
+  (data) => {
+    if (data.viewerText) {
+      content.textContent = data.viewerText;
+      if (data.viewerFileName) setCurrentFileName(data.viewerFileName);
+      // بعد از نمایش، پاکش کن که دفعه بعد تب خالی باز بشه
+      chrome.storage.local.remove(["viewerText", "viewerPreview", "viewerFileName"]);
+    }
+    // فونت پیش‌فرض همون فونتی باشه که کاربر انتخاب کرده
+    const font = data.selectedFont === "system" ? "Vazirmatn" : data.selectedFont;
+    fontSelect.value = font;
+    applyFont(font);
+    if (data.viewerText && data.viewerPreview) {
+      setPreviewMode(true);
+    } else {
+      content.focus();
+    }
+    // پوشه‌ای که از پاپ‌آپ انتخاب شده: فهرستش رو در هدر همین تب نشون بده
+    if (data.pendingFolderFiles && data.pendingFolderFiles.length) {
+      folderFiles = data.pendingFolderFiles;
+      activeFolderFileIdx = -1;
+      renderFileHeader();
+      chrome.storage.local.remove(["pendingFolderFiles"]);
+    }
   }
-  // فونت پیش‌فرض همون فونتی باشه که کاربر انتخاب کرده
-  const font = data.selectedFont === "system" ? "Vazirmatn" : data.selectedFont;
-  fontSelect.value = font;
-  applyFont(font);
-  if (data.viewerText && data.viewerPreview) {
-    setPreviewMode(true);
-  } else {
-    content.focus();
-  }
-});
+);
 
 function applyFont(font) {
   const family = `'${font}', Tahoma, sans-serif`;
@@ -72,6 +95,116 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+// ---------- نام فایلی که همین الان در حال خواندنشیم، در هدر و عنوان تب نشون بده ----------
+function setCurrentFileName(name) {
+  if (!name) {
+    currentFileNameEl.textContent = "";
+    currentFileNameEl.title = "";
+    currentFileControl.classList.remove("visible");
+    document.title = "متن راست‌چین";
+    return;
+  }
+  currentFileNameEl.textContent = name;
+  currentFileNameEl.title = name;
+  currentFileControl.classList.add("visible");
+  document.title = `${name} — فارسی‌فای`;
+}
+
+function fileNameFromUrl(parsedUrl) {
+  const segments = parsedUrl.pathname.split("/").filter(Boolean);
+  const last = segments.pop();
+  try {
+    return last ? decodeURIComponent(last) : parsedUrl.hostname;
+  } catch {
+    return last || parsedUrl.hostname;
+  }
+}
+
+// ============================================
+// آدرس تبِ ویوئر: منبع سند فعلی (لینک یا هندلِ فایل/پوشه‌ی لوکال) رو توی
+// query string نگه می‌داره تا هم اسم فایل توی آدرس‌بار معلوم باشه، هم با
+// رفرش کردن همون تب، آخرین نسخه‌ی سند از همون منبع دوباره خونده بشه
+// ============================================
+function setAddressParams(params) {
+  const qs = new URLSearchParams(params).toString();
+  history.replaceState(null, "", qs ? `${location.pathname}?${qs}` : location.pathname);
+}
+
+// ---------- ذخیره‌ی هندل‌های File System Access API در IndexedDB ----------
+// (بین تب‌های مختلف همین اکستنشن مشترکه، پس با «باز کردن در تب جدید» هم قابل استفاده‌ست)
+const HANDLE_DB_NAME = "farsify-file-handles";
+const HANDLE_STORE = "handles";
+
+function openHandleDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(HANDLE_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveHandle(id, handle) {
+  const db = await openHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, "readwrite");
+    tx.objectStore(HANDLE_STORE).put(handle, id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadHandle(id) {
+  const db = await openHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, "readonly");
+    const req = tx.objectStore(HANDLE_STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function genHandleId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// اول بی‌صدا امتحان می‌کنه (اگه اجازه‌ی قبلی هنوز معتبره). اگه بعد از رفرشِ تب
+// (بدون user gesture) درخواستِ بی‌صدا رد بشه، یک بنر با دکمه نشون می‌ده تا با
+// یک کلیک (که خودش gesture حساب میشه) دوباره امتحان کنه
+async function ensureReadPermission(handle) {
+  const opts = { mode: "read" };
+  try {
+    if ((await handle.queryPermission(opts)) === "granted") return true;
+  } catch {
+    return false;
+  }
+  try {
+    if ((await handle.requestPermission(opts)) === "granted") return true;
+  } catch {
+    // نادیده بگیر، بریم سراغ روش دستی
+  }
+  return askPermissionWithClick(handle);
+}
+
+function askPermissionWithClick(handle) {
+  return new Promise((resolve) => {
+    permBannerText.textContent = "برای بارگذاری این فایل/پوشه‌ی لوکال، دوباره اجازه‌ی دسترسی لازمه.";
+    permBanner.classList.add("visible");
+    const onClick = async () => {
+      permRetryBtn.removeEventListener("click", onClick);
+      permBanner.classList.remove("visible");
+      let granted = false;
+      try {
+        granted = (await handle.requestPermission({ mode: "read" })) === "granted";
+      } catch {
+        granted = false;
+      }
+      resolve(granted);
+    };
+    permRetryBtn.addEventListener("click", onClick);
+  });
+}
+
 // ============================================
 // تبدیل مارک‌داون به HTML (ساده، بدون کتابخونه)
 // بلاک‌ها و کدهای درون‌خطی همیشه چپ‌به‌راست نمایش داده میشن
@@ -83,6 +216,50 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// ---------- رنگ‌بندی ساده‌ی نحوی داخل بلوک‌های کد ----------
+const CODE_KEYWORDS =
+  "if|else|elseif|endif|foreach|endforeach|while|endwhile|for|endfor|do|switch|case|default|break|continue|" +
+  "return|function|fn|class|interface|trait|extends|implements|public|private|protected|static|final|abstract|" +
+  "const|new|use|namespace|try|catch|finally|throw|yield|global|instanceof|echo|print|true|false|null|void|" +
+  "let|var|async|await|export|import|typeof|in|of|and|or|not";
+
+const CODE_TOKEN_RE = new RegExp(
+  "(\\/\\/[^\\n]*|#[^\\n]*)" + // 1: comment
+  "|(\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')" + // 2: string
+  "|(\\$[A-Za-z_]\\w*)" + // 3: variable
+  "|\\b(" + CODE_KEYWORDS + ")\\b" + // 4: keyword
+  "|\\b(\\d+(?:\\.\\d+)?)\\b" + // 5: number
+  "|([A-Za-z_]\\w*)(?=\\s*\\()", // 6: function call
+  "g"
+);
+
+function highlightCode(raw) {
+  let result = "";
+  let lastIndex = 0;
+  let m;
+  CODE_TOKEN_RE.lastIndex = 0;
+  while ((m = CODE_TOKEN_RE.exec(raw)) !== null) {
+    result += escapeHtml(raw.slice(lastIndex, m.index));
+    const [full, comment, string, variable, keyword, number, funcCall] = m;
+    let type = "func";
+    if (comment) type = "comment";
+    else if (string) type = "string";
+    else if (variable) type = "var";
+    else if (keyword) type = "keyword";
+    else if (number) type = "num";
+    result += `<span class="tok-${type}">${escapeHtml(full)}</span>`;
+    lastIndex = CODE_TOKEN_RE.lastIndex;
+  }
+  result += escapeHtml(raw.slice(lastIndex));
+  return result;
+}
+
+function renderCodeBlockHtml(lang, code) {
+  const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
+  const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+  return `<pre class="code-block"${langAttr} dir="ltr"><code${langClass}>${highlightCode(code)}</code></pre>`;
 }
 
 function renderInline(escapedText) {
@@ -123,7 +300,7 @@ function cellAlignAttr(marker) {
 function renderMarkdown(raw) {
   // بلاک‌های کد فنس‌شده رو جدا نگه می‌داریم تا پردازش‌های بعدی روشون اثر نذاره
   const codeBlocks = [];
-  const withPlaceholders = raw.replace(
+  let working = raw.replace(
     /```([^\n`]*)\n([\s\S]*?)```/g,
     (match, lang, code) => {
       const idx = codeBlocks.length;
@@ -131,8 +308,41 @@ function renderMarkdown(raw) {
       return ` CB${idx} `;
     }
   );
-  const lines = withPlaceholders.split(/\r\n|\r|\n/);
-  return processLines(lines, codeBlocks).join("\n");
+
+  // بخش‌های [ltr]...[/ltr] (متنی که کاربر با تولبار انتخاب علامت زده) رو هم
+  // جدا نگه می‌داریم تا escapeHtml و پردازش خط‌به‌خط بهشون کاری نداشته باشه
+  const ltrBlocks = [];
+  working = working.replace(/\[ltr\]([\s\S]+?)\[\/ltr\]/gi, (match, text) => {
+    const idx = ltrBlocks.length;
+    ltrBlocks.push(text);
+    return `\x00LTR${idx}\x00`;
+  });
+
+  const lines = working.split(/\r\n|\r|\n/);
+  let html = processLines(lines, codeBlocks).join("\n");
+
+  html = html.replace(/\x00LTR(\d+)\x00/g, (match, idx) => {
+    const inner = renderLtrContent(ltrBlocks[Number(idx)], codeBlocks);
+    return `<span class="ltr-inline" dir="ltr">${inner}</span>`;
+  });
+
+  return html;
+}
+
+// محتوای داخل [ltr]...[/ltr] ممکنه خودش یک بلوک کد فنس‌شده (که قبلاً به CBn جایگزین شده) داشته باشه؛
+// این تابع آن‌ها را به‌صورت بلوک کد واقعی برمی‌گردونه و بقیه‌ی متن رو escape و به <br> تبدیل می‌کنه
+function renderLtrContent(text, codeBlocks) {
+  return text
+    .split(/( CB\d+ )/g)
+    .map((part) => {
+      const m = part.match(/^ CB(\d+) $/);
+      if (m) {
+        const { lang, code } = codeBlocks[Number(m[1])];
+        return renderCodeBlockHtml(lang, code);
+      }
+      return renderInline(escapeHtml(part)).replace(/\r\n|\r|\n/g, "<br>");
+    })
+    .join("");
 }
 
 // روی یک آرایه از خط‌ها پردازش می‌کنه؛ برای محتوای داخل blockquote هم بازگشتی صدا زده میشه
@@ -174,10 +384,7 @@ function processLines(lines, codeBlocks) {
       flushList();
       flushQuote();
       const { lang, code } = codeBlocks[Number(cb[1])];
-      const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : "";
-      html.push(
-        `<pre class="code-block" dir="ltr"><code${langClass}>${escapeHtml(code)}</code></pre>`
-      );
+      html.push(renderCodeBlockHtml(lang, code));
       continue;
     }
 
@@ -288,6 +495,7 @@ function setPreviewMode(isPreview) {
     preview.classList.add("visible");
     previewBtn.textContent = "✏️ ویرایش متن";
     previewBtn.classList.add("active");
+    hideSelToolbar();
   } else {
     content.classList.remove("hidden");
     preview.classList.remove("visible");
@@ -322,6 +530,9 @@ printBtn.addEventListener("click", () => window.print());
 clearBtn.addEventListener("click", () => {
   content.textContent = "";
   if (previewMode) setPreviewMode(true);
+  setCurrentFileName(null);
+  activeFolderFileIdx = -1;
+  renderFileHeader();
   content.focus();
 });
 
@@ -335,6 +546,35 @@ content.addEventListener("paste", (e) => {
 // ============================================
 // بارگذاری فایل .md از یک آدرس (اینترنت یا لوکال‌هاست)
 // ============================================
+// آدرس منبع رو توی query string تب می‌ذاره (src=...) تا هم اسمش توی آدرس‌بار
+// دیده بشه، هم با رفرش همین تب دوباره از همون آدرس (نسخه‌ی تازه) خونده بشه
+async function fetchAndLoadUrl(href, { updateAddress = true } = {}) {
+  loadUrlBtn.disabled = true;
+  const originalLabel = loadUrlBtn.textContent;
+  loadUrlBtn.textContent = "⏳ در حال بارگذاری...";
+
+  try {
+    const res = await fetch(href, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    content.textContent = text;
+    setPreviewMode(true);
+    setCurrentFileName(fileNameFromUrl(new URL(href)));
+    currentFolderHandleId = null;
+    activeFolderFileIdx = -1;
+    renderFileHeader();
+    if (updateAddress) setAddressParams({ src: href });
+    showToast("فایل با موفقیت بارگذاری شد ✅");
+    return true;
+  } catch (err) {
+    showToast(`بارگذاری ناموفق بود ❌ (${err.message || "خطای شبکه"})`);
+    return false;
+  } finally {
+    loadUrlBtn.disabled = false;
+    loadUrlBtn.textContent = originalLabel;
+  }
+}
+
 async function loadFromUrl() {
   const raw = urlInput.value.trim();
   if (!raw) return;
@@ -358,23 +598,7 @@ async function loadFromUrl() {
     return;
   }
 
-  loadUrlBtn.disabled = true;
-  const originalLabel = loadUrlBtn.textContent;
-  loadUrlBtn.textContent = "⏳ در حال بارگذاری...";
-
-  try {
-    const res = await fetch(parsed.href, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    content.textContent = text;
-    setPreviewMode(true);
-    showToast("فایل با موفقیت بارگذاری شد ✅");
-  } catch (err) {
-    showToast(`بارگذاری ناموفق بود ❌ (${err.message || "خطای شبکه"})`);
-  } finally {
-    loadUrlBtn.disabled = false;
-    loadUrlBtn.textContent = originalLabel;
-  }
+  await fetchAndLoadUrl(parsed.href);
 }
 
 loadUrlBtn.addEventListener("click", loadFromUrl);
@@ -382,8 +606,64 @@ urlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadFromUrl();
 });
 
+// صفحه با ?src=<آدرس> باز شده (بارگذاری اولیه یا رفرش تبی که قبلاً از یک URL بارگذاری شده بود)
+(function initFromSrcParam() {
+  const src = new URLSearchParams(location.search).get("src");
+  if (!src) return;
+  urlInput.value = src;
+  fetchAndLoadUrl(src, { updateAddress: false });
+})();
+
 // ---------- بارگذاری فایل .md از سیستم (فایل‌های لوکال) ----------
-loadFileBtn.addEventListener("click", () => mdFileInput.click());
+// جایی که File System Access API هست (مرورگرهای کرومیومی) از اون استفاده می‌کنیم
+// تا هندلِ فایل رو نگه داریم و با رفرشِ تب، آخرین نسخه‌ی همون فایل از روی دیسک
+// دوباره خونده بشه؛ جاهایی که این API نیست، همون input کلاسیک قبلی کار می‌کنه
+// (با این تفاوت که رفرش، فایل رو دوباره لود نمی‌کنه، چون هندلی نگه‌داشته نمی‌شه)
+const supportsFsAccess = "showOpenFilePicker" in window && "showDirectoryPicker" in window;
+
+loadFileBtn.addEventListener("click", () => {
+  if (supportsFsAccess) pickLocalFile();
+  else mdFileInput.click();
+});
+
+async function pickLocalFile() {
+  let handles;
+  try {
+    handles = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown"] } }]
+    });
+  } catch {
+    return; // کاربر لغو کرد
+  }
+  await loadLocalFileHandle(handles[0]);
+}
+
+// existingId رو فقط وقتی می‌دیم که هندل از IndexedDB (رفرش تب) اومده باشه؛
+// وگرنه (انتخاب تازه‌ی کاربر) یک id جدید می‌سازه و هندل رو ذخیره می‌کنه
+async function loadLocalFileHandle(handle, existingId = null) {
+  const ok = await ensureReadPermission(handle);
+  if (!ok) {
+    showToast("اجازه‌ی خواندن فایل داده نشد ❌");
+    return;
+  }
+  try {
+    const file = await handle.getFile();
+    const text = await file.text();
+    content.textContent = text;
+    setPreviewMode(true);
+    setCurrentFileName(file.name);
+    currentFolderHandleId = null;
+    activeFolderFileIdx = -1;
+    renderFileHeader();
+    const id = existingId || genHandleId();
+    if (!existingId) await saveHandle(id, handle);
+    setAddressParams({ kind: "file", handle: id, name: file.name });
+    showToast(`«${file.name}» بارگذاری شد ✅`);
+  } catch (err) {
+    showToast(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+  }
+}
 
 mdFileInput.addEventListener("change", async () => {
   const file = mdFileInput.files[0];
@@ -392,6 +672,9 @@ mdFileInput.addEventListener("change", async () => {
     const text = await file.text();
     content.textContent = text;
     setPreviewMode(true);
+    setCurrentFileName(file.name);
+    activeFolderFileIdx = -1;
+    renderFileHeader();
     showToast("فایل با موفقیت بارگذاری شد ✅");
   } catch (err) {
     showToast(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
@@ -399,3 +682,451 @@ mdFileInput.addEventListener("change", async () => {
     mdFileInput.value = "";
   }
 });
+
+// ============================================
+// انتخاب یک پوشه از سیستم و نمایش فهرست افقی فایل‌های .md آن در هدر
+// ============================================
+let folderFiles = []; // { label, text } یا { label, handle } (وقتی از File System Access میاد)
+let activeFolderFileIdx = -1;
+let currentFolderHandleId = null; // شناسه‌ی هندلِ پوشه‌ی جاری در IndexedDB (اگه از این مسیر بارگذاری شده باشه)
+
+loadFolderBtn.addEventListener("click", () => {
+  if (supportsFsAccess) pickLocalFolder();
+  else mdFolderInput.click();
+});
+
+async function pickLocalFolder() {
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker();
+  } catch {
+    return; // کاربر لغو کرد
+  }
+  const id = genHandleId();
+  await saveHandle(id, dirHandle);
+  await loadLocalFolderHandle(dirHandle, id);
+}
+
+// بازگشتی همه‌ی فایل‌های .md زیرِ یک پوشه رو با هندلشون پیدا می‌کنه
+async function collectMdEntries(dirHandle, prefix = "") {
+  const out = [];
+  for await (const [name, handle] of dirHandle.entries()) {
+    const rel = prefix ? `${prefix}/${name}` : name;
+    if (handle.kind === "file") {
+      if (/\.(md|markdown)$/i.test(name)) out.push({ label: rel, handle });
+    } else if (handle.kind === "directory") {
+      out.push(...(await collectMdEntries(handle, rel)));
+    }
+  }
+  return out;
+}
+
+async function loadLocalFolderHandle(dirHandle, handleId, { activateLabel = null } = {}) {
+  const ok = await ensureReadPermission(dirHandle);
+  if (!ok) {
+    showToast("اجازه‌ی خواندن پوشه داده نشد ❌");
+    return;
+  }
+
+  const originalLabel = loadFolderBtn.textContent;
+  loadFolderBtn.disabled = true;
+  loadFolderBtn.textContent = "⏳ در حال خواندن فایل‌ها...";
+
+  try {
+    const entries = await collectMdEntries(dirHandle);
+    entries.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+    folderFiles = entries;
+    currentFolderHandleId = handleId;
+
+    if (!folderFiles.length) {
+      showToast("هیچ فایل .md ای در این پوشه پیدا نشد ❌");
+      activeFolderFileIdx = -1;
+      renderFileHeader();
+      return;
+    }
+
+    activeFolderFileIdx = -1;
+    renderFileHeader();
+    setAddressParams({ kind: "dir", handle: handleId });
+
+    const idxToLoad = activateLabel ? folderFiles.findIndex((f) => f.label === activateLabel) : -1;
+    if (idxToLoad !== -1) {
+      await loadFolderFileInline(idxToLoad);
+    } else {
+      showToast(`${folderFiles.length} فایل .md پیدا شد ✅`);
+    }
+  } catch (err) {
+    showToast(`خواندن فایل‌ها ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+  } finally {
+    loadFolderBtn.disabled = false;
+    loadFolderBtn.textContent = originalLabel;
+  }
+}
+
+mdFolderInput.addEventListener("change", async () => {
+  const all = Array.from(mdFolderInput.files || []);
+  const mdFiles = all.filter((f) => /\.(md|markdown)$/i.test(f.name));
+  mdFolderInput.value = "";
+
+  if (!mdFiles.length) {
+    showToast("هیچ فایل .md ای در این پوشه پیدا نشد ❌");
+    folderFiles = [];
+    activeFolderFileIdx = -1;
+    currentFolderHandleId = null;
+    renderFileHeader();
+    return;
+  }
+
+  mdFiles.sort((a, b) =>
+    (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name, "fa")
+  );
+
+  const originalLabel = loadFolderBtn.textContent;
+  loadFolderBtn.disabled = true;
+  loadFolderBtn.textContent = "⏳ در حال خواندن فایل‌ها...";
+
+  try {
+    folderFiles = await Promise.all(
+      mdFiles.map(async (file) => {
+        const rel = file.webkitRelativePath || file.name;
+        // پوشه‌ی ریشه رو از مسیر حذف کن تا فقط مسیر نسبی داخل پوشه نشون داده بشه
+        const slashIdx = rel.indexOf("/");
+        const label = slashIdx !== -1 ? rel.slice(slashIdx + 1) : rel;
+        return { label, text: await file.text() };
+      })
+    );
+    currentFolderHandleId = null;
+    activeFolderFileIdx = -1;
+    renderFileHeader();
+    showToast(`${folderFiles.length} فایل .md پیدا شد ✅`);
+  } catch (err) {
+    showToast(`خواندن فایل‌ها ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+  } finally {
+    loadFolderBtn.disabled = false;
+    loadFolderBtn.textContent = originalLabel;
+  }
+});
+
+function renderFileHeader() {
+  fileChipList.innerHTML = "";
+  if (!folderFiles.length) {
+    fileHeader.classList.remove("visible");
+    return;
+  }
+  folderFiles.forEach((entry, idx) => {
+    const chip = document.createElement("div");
+    chip.className = "file-chip" + (idx === activeFolderFileIdx ? " active" : "");
+    chip.title = entry.label;
+
+    const name = document.createElement("span");
+    name.className = "chip-name";
+    name.textContent = entry.label;
+    chip.appendChild(name);
+
+    const newTabBtn = document.createElement("button");
+    newTabBtn.type = "button";
+    newTabBtn.className = "chip-newtab";
+    newTabBtn.title = "باز کردن در تب جدید";
+    newTabBtn.setAttribute("aria-label", `باز کردن «${entry.label}» در تب جدید`);
+    newTabBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>' +
+      '<polyline points="15 3 21 3 21 9"/>' +
+      '<line x1="10" y1="14" x2="21" y2="3"/>' +
+      "</svg>";
+    newTabBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openFolderFileInNewTab(idx);
+    });
+    chip.appendChild(newTabBtn);
+
+    chip.addEventListener("click", (e) => {
+      // Ctrl/Cmd+کلیک یا کلیک وسط، همون میانبر «باز کردن در تب جدید»
+      if (e.ctrlKey || e.metaKey) {
+        openFolderFileInNewTab(idx);
+      } else {
+        loadFolderFileInline(idx);
+      }
+    });
+    chip.addEventListener("auxclick", (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        openFolderFileInNewTab(idx);
+      }
+    });
+
+    fileChipList.appendChild(chip);
+  });
+  fileHeader.classList.add("visible");
+}
+
+// entry.handle یعنی از File System Access میاد؛ هر بار از روی دیسک تازه خونده می‌شه
+// (نه از یک متنِ ذخیره‌شده)، پس اگه فایل بیرون از این تب ویرایش شده باشه، آخرین نسخه میاد
+async function getEntryText(entry) {
+  if (entry.handle) {
+    const file = await entry.handle.getFile();
+    return file.text();
+  }
+  return entry.text;
+}
+
+async function loadFolderFileInline(idx) {
+  const entry = folderFiles[idx];
+  if (!entry) return;
+  let text;
+  try {
+    text = await getEntryText(entry);
+  } catch (err) {
+    showToast(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
+    return;
+  }
+  content.textContent = text;
+  setPreviewMode(true);
+  setCurrentFileName(entry.label);
+  activeFolderFileIdx = idx;
+  renderFileHeader();
+  if (currentFolderHandleId) {
+    setAddressParams({ kind: "dir", handle: currentFolderHandleId, entry: entry.label });
+  }
+  showToast(`«${entry.label}» بارگذاری شد ✅`);
+}
+
+function openFolderFileInNewTab(idx) {
+  const entry = folderFiles[idx];
+  if (!entry) return;
+  if (entry.handle && currentFolderHandleId) {
+    const url =
+      chrome.runtime.getURL("viewer.html") +
+      `?kind=dir&handle=${encodeURIComponent(currentFolderHandleId)}&entry=${encodeURIComponent(entry.label)}`;
+    chrome.tabs.create({ url });
+    return;
+  }
+  chrome.storage.local.set(
+    { viewerText: entry.text, viewerPreview: true, viewerFileName: entry.label },
+    () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+    }
+  );
+}
+
+// ============================================
+// تولبار شناور روی متن انتخاب‌شده: چپ‌چین یا کد
+// ============================================
+function hideSelToolbar() {
+  selToolbar.classList.remove("show");
+}
+
+// ناحیه‌ی فعالِ فعلی: در حالت ویرایش متن خام، در حالت پیش‌نمایش خروجی رندرشده
+function activeSurface() {
+  return previewMode ? preview : content;
+}
+
+function updateSelToolbar() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !sel.toString().trim()) {
+    hideSelToolbar();
+    return;
+  }
+  const range = sel.getRangeAt(0);
+  if (!activeSurface().contains(range.commonAncestorContainer)) {
+    hideSelToolbar();
+    return;
+  }
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    hideSelToolbar();
+    return;
+  }
+  selToolbar.classList.add("show");
+  const toolbarRect = selToolbar.getBoundingClientRect();
+  const left = Math.min(
+    Math.max(8, rect.left + rect.width / 2 - toolbarRect.width / 2),
+    window.innerWidth - toolbarRect.width - 8
+  );
+  const top = Math.max(8, rect.top - toolbarRect.height - 8);
+  selToolbar.style.left = left + "px";
+  selToolbar.style.top = top + "px";
+}
+
+document.addEventListener("selectionchange", () => {
+  requestAnimationFrame(updateSelToolbar);
+});
+window.addEventListener("scroll", hideSelToolbar, true);
+window.addEventListener("resize", hideSelToolbar);
+
+// جلوگیری از افتادن فوکوس/کولاپس‌شدن انتخاب موقع کلیک روی خود تولبار
+selToolbar.addEventListener("mousedown", (e) => e.preventDefault());
+
+function isInsideRenderedCode(range) {
+  let node = range.commonAncestorContainer;
+  if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+  return !!(node.closest && node.closest("code, pre.code-block"));
+}
+
+const BLOCK_TAGS = /^(P|DIV|PRE|LI|UL|OL|H[1-6]|BLOCKQUOTE|TABLE|TR|HR)$/;
+
+// Selection.toString() بین مرورگرها یکسان نیست (بعضی‌ها برای <br> و مرزِ بلاک‌ها
+// خط‌جدید می‌گذارند و بعضی‌ها نه). برای اینکه تطبیق با متن خام قابل‌اتکا باشد،
+// متن انتخاب‌شده را خودمان با مرزهای مشخص بیرون می‌کشیم.
+function nodeToText(node) {
+  let out = "";
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += child.nodeValue;
+    } else if (child.nodeName === "BR") {
+      out += "\n";
+    } else {
+      const isBlock = BLOCK_TAGS.test(child.nodeName);
+      if (isBlock && out && !out.endsWith("\n")) out += "\n";
+      out += nodeToText(child);
+      if (isBlock && !out.endsWith("\n")) out += "\n";
+    }
+  });
+  return out;
+}
+
+function rangeToText(range) {
+  return nodeToText(range.cloneContents());
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// متنِ رندرشده و متنِ خام دقیقاً یکی نیستند: مرورگرها فاصله/خط‌جدید را در
+// Selection.toString() جور دیگری سریال می‌کنند و متن خام هم نویسه‌های مارک‌داون
+// (بک‌تیک، *، _) دارد که در خروجی دیده نمی‌شوند. پس به‌جای تطبیق عیناً برابر،
+// روی «کلمه‌ها» تطبیق می‌دهیم و بین آن‌ها این نویسه‌ها را مجاز می‌شماریم.
+function buildLooseMatcher(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  return new RegExp(words.map(escapeRegExp).join("[\\s`*_~]+"), "g");
+}
+
+function normalizeForCounting(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function countOccurrences(haystack, needle) {
+  if (!needle) return 0;
+  let count = 0;
+  let from = 0;
+  let at;
+  while ((at = haystack.indexOf(needle, from)) !== -1) {
+    count++;
+    from = at + needle.length;
+  }
+  return count;
+}
+
+// n اُمین تکرار (۰-پایه) از متن انتخاب‌شده را در متن خام پیدا می‌کند.
+// اگر آن تکرار نبود، آخرین تطبیق موجود را برمی‌گرداند تا کار کاربر نخوابد.
+function findSourceRange(source, selected, ordinal) {
+  const matcher = buildLooseMatcher(selected);
+  if (!matcher) return null;
+  const hits = [];
+  let m;
+  while ((m = matcher.exec(source)) !== null) {
+    hits.push({ start: m.index, end: m.index + m[0].length });
+    if (m[0].length === 0) matcher.lastIndex++;
+  }
+  if (!hits.length) return null;
+  return hits[Math.min(ordinal, hits.length - 1)];
+}
+
+// انتخابِ کاربر (چه در حالت ویرایش، چه در پیش‌نمایشِ رندرشده) را به موقعیتِ دقیقش
+// در متن خامِ #content نگاشت می‌کند. چون همان متن ممکن است چند بار در سند تکرار
+// شده باشد، «چندمین تکرار» را از روی متنِ قبل از نقطه‌ی شروعِ انتخاب حساب می‌کنیم.
+function locateSelectionInSource(surfaceRoot, range, selected) {
+  const before = document.createRange();
+  before.setStart(surfaceRoot, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  const ordinal = countOccurrences(
+    normalizeForCounting(rangeToText(before)),
+    normalizeForCounting(selected)
+  );
+  return findSourceRange(content.innerText, selected, ordinal);
+}
+
+// transform به‌جای فقط متنِ انتخاب‌شده، کل متنِ خام و بازه‌ی انتخاب را هم می‌گیرد
+// تا بتواند بر اساس نویسه‌ی قبل/بعد تصمیم بگیرد (مثلاً خط‌جدید فقط وقتی لازم است
+// اضافه شود، نه همیشه — وگرنه با هر بار اعمال، فاصله‌های خالی تلنبار می‌شوند)
+function applyTransformToSelection(transform) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  const surface = activeSurface();
+  if (!surface.contains(range.commonAncestorContainer)) return false;
+
+  const selected = rangeToText(range);
+  if (!selected.trim()) return false;
+
+  // انتخاب داخل کدِ رندرشده به متنِ بینِ فنس‌ها نگاشت می‌شود؛ درج نشانه آنجا
+  // فقط نشانه را به‌صورت متن خام داخل کد نشان می‌دهد، پس جلویش را می‌گیریم
+  if (previewMode && isInsideRenderedCode(range)) {
+    showToast("این بخش همین حالا کد یا چپ‌چین است ✅");
+    return false;
+  }
+
+  const hit = locateSelectionInSource(surface, range, selected);
+  if (!hit) {
+    showToast("این بخش در متن خام پیدا نشد ❌");
+    return false;
+  }
+
+  const source = content.innerText;
+  const replacement = transform(source.slice(hit.start, hit.end), source, hit.start, hit.end);
+  content.textContent = source.slice(0, hit.start) + replacement + source.slice(hit.end);
+  return true;
+}
+
+function wrapSelectionText(transform) {
+  if (!applyTransformToSelection(transform)) return;
+  hideSelToolbar();
+  // بلافاصله نتیجه‌ی رندرشده را نشان بده تا تغییر ظاهر در همان لحظه دیده شود
+  setPreviewMode(true);
+}
+
+selLtrBtn.addEventListener("click", () => {
+  wrapSelectionText((text) => `[ltr]${text}[/ltr]`);
+});
+
+selCodeBtn.addEventListener("click", () => {
+  wrapSelectionText((text, source, start, end) => {
+    if (!text.includes("\n")) return `\`${text}\``;
+    // فنسِ سه‌بک‌تیکی باید روی خط خودش باشد، ولی فقط وقتی خط‌جدیدِ لازم از قبل
+    // آنجا نیست باید اضافه شود — وگرنه با هر بار اعمال، یک خط خالیِ تازه روی
+    // خط خالیِ قبلی انباشته می‌شود و کل صفحه هر بار بیشتر «پرش» می‌کند
+    const needsLeadingNL = start > 0 && source[start - 1] !== "\n";
+    const needsTrailingNL = end < source.length && source[end] !== "\n";
+    return `${needsLeadingNL ? "\n" : ""}\`\`\`\n${text}\n\`\`\`${needsTrailingNL ? "\n" : ""}`;
+  });
+});
+
+// صفحه با ?kind=file|dir&handle=<id> باز شده: یعنی این تب قبلاً یک فایل/پوشه‌ی
+// لوکال رو با File System Access API بارگذاری کرده بود و الان (بارگذاری اولیه
+// یا رفرش) باید همون هندل رو از IndexedDB برداره و آخرین نسخه رو از دیسک بخونه
+(async function initFromHandleParams() {
+  const params = new URLSearchParams(location.search);
+  const kind = params.get("kind");
+  const handleId = params.get("handle");
+  if (!kind || !handleId) return;
+
+  let handle;
+  try {
+    handle = await loadHandle(handleId);
+  } catch {
+    handle = null;
+  }
+  if (!handle) {
+    showToast("این فایل/پوشه قبلاً از سیستم انتخاب شده و دیگه در دسترس نیست؛ دوباره انتخابش کن ❌");
+    return;
+  }
+
+  if (kind === "file") {
+    await loadLocalFileHandle(handle, handleId);
+  } else if (kind === "dir") {
+    const entry = params.get("entry");
+    await loadLocalFolderHandle(handle, handleId, { activateLabel: entry || null });
+  }
+})();

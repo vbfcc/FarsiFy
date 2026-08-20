@@ -41,6 +41,12 @@
       --toast-text: #fff;
       --accent: #3b59b6;
       --accent-hover: #324c9e;
+      --tok-keyword: #1a56db;
+      --tok-string: #1a7f37;
+      --tok-comment: #8b8fa3;
+      --tok-var: #b5314c;
+      --tok-func: #b35a00;
+      --tok-num: #8250df;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -68,6 +74,12 @@
         --toast-text: #222;
         --accent: #5470d6;
         --accent-hover: #6b84e0;
+        --tok-keyword: #7aa2f7;
+        --tok-string: #7ec699;
+        --tok-comment: #6d6f7c;
+        --tok-var: #e07a9e;
+        --tok-func: #e0a458;
+        --tok-num: #c792ea;
       }
     }
     :root[data-theme="dark"] {
@@ -95,6 +107,12 @@
       --toast-text: #222;
       --accent: #5470d6;
       --accent-hover: #6b84e0;
+      --tok-keyword: #7aa2f7;
+      --tok-string: #7ec699;
+      --tok-comment: #6d6f7c;
+      --tok-var: #e07a9e;
+      --tok-func: #e0a458;
+      --tok-num: #c792ea;
     }
     :root[data-theme="light"] {
       --bg: #eef0f5;
@@ -131,11 +149,13 @@
       min-height: 100vh;
       transition: background .2s, color .2s;
     }
-    /* نوار ابزار بالای صفحه */
-    .toolbar {
+    /* هدر چسبان بالای صفحه: هر دو نوار ابزار + نوار فایل‌ها با هم اسکرول رو نادیده می‌گیرن */
+    .header-wrap {
       position: sticky;
       top: 0;
       z-index: 10;
+    }
+    .toolbar {
       background: var(--toolbar-bg);
       border-bottom: 1px solid var(--toolbar-border);
       padding: 10px 20px;
@@ -157,6 +177,17 @@
       gap: 6px;
       font-size: 12.5px;
       color: var(--sub-text);
+    }
+    .control.file-current { display: none; }
+    .control.file-current.visible { display: flex; }
+    .current-file-name {
+      color: var(--accent);
+      font-weight: bold;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      unicode-bidi: plaintext;
     }
     select, input[type="range"] {
       font-family: inherit;
@@ -206,6 +237,100 @@
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
+    }
+
+    /* نوار افقی لیست فایل‌های .md یک پوشه‌ی انتخاب‌شده؛ به سبک سکشن‌های نوار ابزار بالا (برچسب + محتوا) */
+    .file-header {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      padding: 10px 20px;
+      box-shadow: 0 1px 4px var(--toolbar-shadow);
+    }
+    .file-header.visible { display: flex; }
+    .file-header-label {
+      flex: 0 0 auto;
+      font-size: 12.5px;
+      color: var(--sub-text);
+      white-space: nowrap;
+    }
+    .file-chip-list {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* بنری که وقتی رفرش نتونه بی‌صدا دوباره اجازه‌ی دسترسی به فایل/پوشه‌ی لوکال رو بگیره نشون داده میشه */
+    .perm-banner {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      padding: 10px 20px;
+      font-size: 12.5px;
+      color: var(--sub-text);
+      box-shadow: 0 1px 4px var(--toolbar-shadow);
+    }
+    .perm-banner.visible { display: flex; }
+    .file-chip {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex: 0 0 auto;
+      padding: 4px 4px 4px 14px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--btn-bg);
+      color: var(--text);
+      white-space: nowrap;
+      cursor: pointer;
+      font-size: 12.5px;
+      transition: background .15s;
+    }
+    .file-chip:hover { background: var(--btn-hover-bg); }
+    .file-chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .file-chip .chip-name { pointer-events: none; padding-inline-end: 4px; }
+    .file-chip .chip-newtab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--page-bg);
+      color: var(--sub-text);
+      cursor: pointer;
+      padding: 0;
+    }
+    .file-chip .chip-newtab svg { width: 13px; height: 13px; pointer-events: none; }
+    .file-chip .chip-newtab:hover,
+    .file-chip .chip-newtab:focus-visible {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      outline: none;
+    }
+    .file-chip.active .chip-newtab {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.5);
+      color: #fff;
+    }
+    .file-chip.active .chip-newtab:hover,
+    .file-chip.active .chip-newtab:focus-visible {
+      background: rgba(255,255,255,0.32);
+      border-color: #fff;
     }
 
     /* برگه متن */
@@ -294,11 +419,11 @@
       direction: ltr;
       unicode-bidi: isolate;
       font-family: 'Consolas', 'SFMono-Regular', Menlo, Monaco, monospace;
-      font-size: 0.88em;
+      font-size: 0.86em;
       background: var(--code-bg);
       border: 1px solid var(--code-border);
-      border-radius: 4px;
-      padding: 1px 5px;
+      border-radius: 6px;
+      padding: 2px 8px;
       color: var(--code-text);
     }
     #preview pre.code-block {
@@ -307,19 +432,62 @@
       unicode-bidi: isolate;
       background: var(--code-bg);
       border: 1px solid var(--code-border);
-      border-radius: 8px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 14px 16px;
       margin: 0 0 0.9em;
       overflow-x: auto;
       font-family: 'Consolas', 'SFMono-Regular', Menlo, Monaco, monospace;
       font-size: 0.82em;
       line-height: 1.6;
     }
+    #preview pre.code-block[data-lang]::before {
+      content: attr(data-lang);
+      display: block;
+      font-family: 'Consolas', 'SFMono-Regular', Menlo, Monaco, monospace;
+      font-size: 0.82em;
+      color: var(--sub-text);
+      margin-bottom: 8px;
+    }
     #preview pre.code-block code {
       background: none;
       border: none;
       padding: 0;
       font-size: 1em;
+    }
+    /* ---------- رنگ‌بندی ساده‌ی نحوی داخل بلوک‌های کد ---------- */
+    #preview pre.code-block .tok-keyword { color: var(--tok-keyword); }
+    #preview pre.code-block .tok-string { color: var(--tok-string); }
+    #preview pre.code-block .tok-comment { color: var(--tok-comment); font-style: italic; }
+    #preview pre.code-block .tok-var { color: var(--tok-var); }
+    #preview pre.code-block .tok-func { color: var(--tok-func); }
+    #preview pre.code-block .tok-num { color: var(--tok-num); }
+
+    /* ---------- تولبار شناور روی متن انتخاب‌شده ---------- */
+    .sel-toolbar {
+      position: fixed;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: var(--toolbar-bg);
+      border: 1px solid var(--toolbar-border);
+      border-radius: 8px;
+      box-shadow: 0 2px 10px var(--toolbar-shadow);
+      padding: 4px;
+      z-index: 50;
+    }
+    .sel-toolbar.show { display: flex; }
+    .sel-toolbar button {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      font-size: 12.5px;
+      white-space: nowrap;
+    }
+
+    /* ---------- نمایش چپ‌چین متن انتخاب‌شده در پیش‌نمایش ---------- */
+    #preview .ltr-inline {
+      unicode-bidi: isolate;
     }
 
     .toast {
@@ -340,7 +508,7 @@
 
     /* موقع پرینت فقط متن چاپ بشه، همیشه با تم روشن */
     @media print {
-      .toolbar, .toast { display: none !important; }
+      .toolbar, .file-header, .perm-banner, .toast { display: none !important; }
       body { background: #fff !important; color: #1c1c1e !important; }
       .page { box-shadow: none; margin: 0; max-width: 100%; border-radius: 0; background: #fff !important; }
       #content, #preview { color: #1c1c1e !important; }
@@ -351,44 +519,62 @@
   </style>
 </head>
 <body>
-  <div class="toolbar">
-    <div class="control">
-      <span>فونت:</span>
-      <select id="fontSelect">
-        <option value="Vazirmatn">وزیرمتن</option>
-        <option value="Shabnam">شبنم</option>
-        <option value="Sahel">ساحل</option>
-        <option value="Samim">صمیم</option>
-      </select>
+  <div class="header-wrap">
+    <div class="toolbar">
+      <div class="control">
+        <span>فونت:</span>
+        <select id="fontSelect">
+          <option value="Vazirmatn">وزیرمتن</option>
+          <option value="Shabnam">شبنم</option>
+          <option value="Sahel">ساحل</option>
+          <option value="Samim">صمیم</option>
+        </select>
+      </div>
+      <div class="control">
+        <span>اندازه:</span>
+        <input type="range" id="sizeRange" min="13" max="34" value="18">
+        <span class="size-val" id="sizeVal">18</span>
+      </div>
+      <div class="control">
+        <span>🌙 تم:</span>
+        <select id="themeSelect">
+          <option value="system">سیستم</option>
+          <option value="light">روشن</option>
+          <option value="dark">تاریک</option>
+        </select>
+      </div>
+      <button id="previewBtn">👁️ پیش‌نمایش مارک‌داون</button>
+      <button id="copyBtn">📋 کپی متن</button>
+      <button id="printBtn">🖨️ چاپ / PDF</button>
+      <button class="accent" id="clearBtn">🗑️ پاک کردن</button>
+      <div class="control file-current" id="currentFileControl">
+        <span>📄 در حال خواندن:</span>
+        <span id="currentFileName" class="current-file-name"></span>
+      </div>
+      <div class="brand">فارسی‌فای</div>
     </div>
-    <div class="control">
-      <span>اندازه:</span>
-      <input type="range" id="sizeRange" min="13" max="34" value="18">
-      <span class="size-val" id="sizeVal">18</span>
-    </div>
-    <div class="control">
-      <span>🌙 تم:</span>
-      <select id="themeSelect">
-        <option value="system">سیستم</option>
-        <option value="light">روشن</option>
-        <option value="dark">تاریک</option>
-      </select>
-    </div>
-    <button id="previewBtn">👁️ پیش‌نمایش مارک‌داون</button>
-    <button id="copyBtn">📋 کپی متن</button>
-    <button id="printBtn">🖨️ چاپ / PDF</button>
-    <button class="accent" id="clearBtn">🗑️ پاک کردن</button>
-    <div class="brand">فارسی‌فای</div>
-  </div>
 
-  <div class="toolbar" style="border-top: 1px solid var(--toolbar-border);">
-    <div class="control">
-      <span>📥 بارگذاری .md از:</span>
-      <input type="url" id="urlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+    <div class="toolbar" style="border-top: 1px solid var(--toolbar-border);">
+      <div class="control">
+        <span>📥 بارگذاری .md از:</span>
+        <input type="url" id="urlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+      </div>
+      <button class="accent" id="loadUrlBtn">بارگذاری</button>
+      <input type="file" id="mdFileInput" accept=".md,.markdown,.txt" style="display:none">
+      <button id="loadFileBtn">📂 انتخاب فایل از سیستم</button>
+      <input type="file" id="mdFolderInput" webkitdirectory multiple style="display:none">
+      <button id="loadFolderBtn">🗂️ انتخاب پوشه</button>
     </div>
-    <button class="accent" id="loadUrlBtn">بارگذاری</button>
-    <input type="file" id="mdFileInput" accept=".md,.markdown,.txt" style="display:none">
-    <button id="loadFileBtn">📂 انتخاب فایل از سیستم</button>
+
+    <div class="file-header" id="fileHeader">
+      <span class="file-header-label">📄 فایل‌های پوشه:</span>
+      <div class="file-chip-list" id="fileChipList"></div>
+    </div>
+
+    <div class="perm-banner" id="permBanner">
+      <span id="permBannerText"></span>
+      <button class="accent" id="permRetryBtn" type="button">🔓 اجازه بده</button>
+    </div>
   </div>
 
   <div class="page">
@@ -397,6 +583,11 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="sel-toolbar" id="selToolbar">
+    <button id="selLtrBtn" type="button">⬅️ چپ‌چین</button>
+    <button id="selCodeBtn" type="button">💻 کد</button>
+  </div>
 
   <script src="viewer.js"></script>
 </body>

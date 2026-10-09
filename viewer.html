@@ -368,10 +368,21 @@
       margin: 1em 0 0.5em;
       line-height: 1.5;
     }
+    #preview > :first-child { margin-top: 0; }
+    #preview h2 {
+      padding-bottom: 0.35em;
+      border-bottom: 1px solid var(--border);
+    }
+    #preview strong { font-weight: 700; }
     #preview ul, #preview ol {
       margin: 0 0 0.9em;
       padding-inline-start: 1.6em;
     }
+    #preview li { margin-bottom: 0.35em; }
+    #preview li > p { margin-bottom: 0.35em; }
+    #preview li > :last-child { margin-bottom: 0; }
+    #preview li > ul, #preview li > ol { margin-top: 0.35em; }
+    #preview li::marker { color: var(--link-color); }
     #preview blockquote {
       margin: 0 0 0.9em;
       padding: 4px 14px;
@@ -384,6 +395,61 @@
       margin: 1.2em 0;
     }
     #preview a { color: var(--link-color); }
+    #preview .document-image {
+      display: block;
+      max-width: 100%;
+      max-height: 720px;
+      height: auto;
+      margin: 10px auto;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+    #preview td .document-image { max-height: 360px; }
+    #preview .image-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 12px;
+      margin: 10px 0;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--sub-text);
+      text-decoration: none;
+      cursor: default;
+    }
+    #preview .image-placeholder button { white-space: normal; }
+    #preview .image-source-path { max-width: 100%; overflow-wrap: anywhere; font-size: 11px; }
+    .resource-notice {
+      padding: 10px 18px;
+      background: var(--code-bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+    .resource-notice[hidden] { display: none; }
+    .resource-notice button { margin-inline-start: 10px; }
+    #preview pre.source-file {
+      direction: ltr;
+      text-align: left;
+      overflow-x: auto;
+      font: 14px/1.8 Consolas, monospace;
+      background: var(--code-bg);
+      padding: 12px 0;
+    }
+    #preview pre.source-file > code { background: none; border: none; padding: 0; font-size: inherit; }
+    .source-line { display: flex; min-width: max-content; scroll-margin-top: 180px; }
+    .source-line > span { white-space: pre; padding-inline-end: 12px; }
+    .source-line .line-number {
+      width: 5em;
+      flex-shrink: 0;
+      text-align: right;
+      padding: 0 16px;
+      color: var(--sub-text);
+      user-select: none;
+      text-decoration: none;
+    }
+    .source-line.selected-line, .source-line:target { background: rgba(127, 157, 255, 0.22); }
 
     /* ---------- جدول‌های مارک‌داون ---------- */
     #preview .table-wrap {
@@ -557,7 +623,7 @@
     <div class="toolbar" style="border-top: 1px solid var(--toolbar-border);">
       <div class="control">
         <span>📥 بارگذاری .md از:</span>
-        <input type="url" id="urlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+        <input type="text" id="urlInput" placeholder="آدرس اینترنتی یا مسیر کامل فایل مثل E:\docs\file.md">
       </div>
       <button class="accent" id="loadUrlBtn">بارگذاری</button>
       <input type="file" id="mdFileInput" accept=".md,.markdown,.txt" style="display:none">
@@ -575,6 +641,10 @@
       <span id="permBannerText"></span>
       <button class="accent" id="permRetryBtn" type="button">🔓 اجازه بده</button>
     </div>
+    <div class="resource-notice" id="resourceNotice" role="status" hidden>
+      <span id="resourceNoticeText"></span>
+      <button id="attachResourceFolderBtn" type="button" hidden>انتخاب پوشهٔ منبع</button>
+    </div>
   </div>
 
   <div class="page">
@@ -589,6 +659,9 @@
     <button id="selCodeBtn" type="button">💻 کد</button>
   </div>
 
+  <script src="source-paths.js"></script>
+  <script src="adjacent-tabs.js"></script>
+  <script src="viewer-resources.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

@@ -40,16 +40,21 @@ function saveTabSettings() {
 }
 
 // ---------- خوندن تنظیمات تب فعال ----------
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  if (!tabs[0]) return;
+const sourceTabReady = new Promise((resolve) => chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  if (!tabs[0]) { resolve(null); return; }
   activeTabId = tabs[0].id;
+  resolve(activeTabId);
   chrome.storage.local.get({ [storageKey()]: DEFAULTS }, (data) => {
     const settings = data[storageKey()];
     fontToggle.checked = settings.fontEnabled;
     rtlToggle.checked = settings.rtlEnabled;
     fontSelect.value = settings.selectedFont;
   });
-});
+}));
+
+async function openAdjacentViewer(url) {
+  return AdjacentTabs.open(url, await sourceTabReady);
+}
 
 // ---------- وضعیت صفحه فعلی ----------
 function updatePageStatus() {
@@ -78,8 +83,8 @@ fontSelect.addEventListener("change", saveTabSettings);
 // ---------- باز کردن متن در تب جدید ----------
 openViewerBtn.addEventListener("click", () => {
   const text = pasteArea.value.trim();
-  chrome.storage.local.set({ viewerText: text }, () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+  chrome.storage.local.set({ viewerText: text, viewerPreview: true, viewerFileName: "" }, () => {
+    openAdjacentViewer(chrome.runtime.getURL("viewer.html"));
   });
 });
 
@@ -95,31 +100,19 @@ function loadMdFromUrl() {
   const raw = mdUrlInput.value.trim();
   if (!raw) return;
 
-  // مسیرهای فایل ویندوزی مثل E:\... یا \\server\share\... یا file:///
-  const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(raw) || /^\\\\/.test(raw);
-  if (isWindowsPath || raw.startsWith("file:")) {
-    mdUrlInput.title = "مسیر فایل سیستم پشتیبانی نمی‌شه؛ آدرس رو در ویوئر باز کن و از اونجا امتحان کن، یا محتوا رو کپی/پیست کن";
-    mdUrlInput.reportValidity?.();
-    alert("مسیر فایل سیستم پشتیبانی نمی‌شه؛ محتوای فایل رو کپی و پیست کن یا از یک آدرس http(s) استفاده کن ❌");
-    return;
-  }
-
   let parsed;
   try {
-    parsed = new URL(raw);
-  } catch {
-    alert("آدرس نامعتبره ❌");
-    return;
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    alert("فقط آدرس‌های http:// و https:// پشتیبانی می‌شن ❌");
+    const ref = SourcePaths.parseReference(raw);
+    parsed = { ...ref, kind: "url", url: SourcePaths.inputUrl(ref.path).href };
+  } catch (err) {
+    alert(`آدرس نامعتبره ❌ (${err.message})`);
     return;
   }
 
   // خودِ فچ رو به تب ویوئر می‌سپریم (با src= توی آدرس) تا هم اسم فایل توی آدرس‌بار
   // اون تب معلوم باشه، هم با رفرش کردن همون تب، آخرین نسخه دوباره از همون آدرس بیاد
-  const viewerUrl = chrome.runtime.getURL("viewer.html") + "?src=" + encodeURIComponent(parsed.href);
-  chrome.tabs.create({ url: viewerUrl });
+  const viewerUrl = chrome.runtime.getURL("viewer.html") + "?" + SourcePaths.viewerParams(parsed);
+  openAdjacentViewer(viewerUrl);
 }
 
 loadMdUrlBtn.addEventListener("click", loadMdFromUrl);
@@ -183,7 +176,7 @@ async function pickAndOpenFile() {
     const viewerUrl =
       chrome.runtime.getURL("viewer.html") +
       `?kind=file&handle=${encodeURIComponent(id)}&name=${encodeURIComponent(handle.name)}`;
-    chrome.tabs.create({ url: viewerUrl });
+    await openAdjacentViewer(viewerUrl);
   } catch (err) {
     alert(`باز کردن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   }
@@ -195,7 +188,7 @@ mdFileInput.addEventListener("change", async () => {
   try {
     const text = await file.text();
     chrome.storage.local.set({ viewerText: text, viewerPreview: true, viewerFileName: file.name }, () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+      openAdjacentViewer(chrome.runtime.getURL("viewer.html"));
     });
   } catch (err) {
     alert(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
@@ -221,7 +214,7 @@ async function pickAndOpenFolder() {
     const id = genHandleId();
     await saveHandle(id, dirHandle);
     const viewerUrl = chrome.runtime.getURL("viewer.html") + `?kind=dir&handle=${encodeURIComponent(id)}`;
-    chrome.tabs.create({ url: viewerUrl });
+    await openAdjacentViewer(viewerUrl);
   } catch (err) {
     alert(`باز کردن پوشه ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   }
@@ -246,17 +239,14 @@ mdFolderInput.addEventListener("change", async () => {
   loadMdFolderBtn.textContent = "⏳ در حال خواندن فایل‌ها...";
 
   try {
-    const entries = await Promise.all(
-      mdFiles.map(async (file) => {
-        const rel = file.webkitRelativePath || file.name;
-        const slashIdx = rel.indexOf("/");
-        const label = slashIdx !== -1 ? rel.slice(slashIdx + 1) : rel;
-        return { label, text: await file.text() };
-      })
-    );
-    chrome.storage.local.set({ pendingFolderFiles: entries }, () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+    const entries = all.map((file) => {
+      const rel = file.webkitRelativePath || file.name;
+      const slashIdx = rel.indexOf("/");
+      return { path: slashIdx !== -1 ? rel.slice(slashIdx + 1) : rel, file };
     });
+    const id = genHandleId();
+    await saveHandle(id, entries);
+    await openAdjacentViewer(chrome.runtime.getURL("viewer.html") + `?kind=bundle&handle=${encodeURIComponent(id)}`);
   } catch (err) {
     alert(`خواندن فایل‌ها ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   } finally {

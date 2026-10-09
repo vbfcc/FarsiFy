@@ -200,8 +200,8 @@
   <!-- بخش ۳: متن راست‌چین در تب جدید -->
   <div class="section">
     <div class="label">📄 نمایش متن راست‌چین</div>
-    <textarea id="pasteArea" placeholder="متنت رو اینجا paste کن..."></textarea>
-    <button class="primary" id="openViewer">باز کردن در تب جدید</button>
+    <textarea id="pasteArea" placeholder="متن یا مارک‌داون را اینجا بچسبان؛ تیترها و **متن بولد** خودکار نمایش داده می‌شوند."></textarea>
+    <button class="primary" id="openViewer">نمایش در تب کناری</button>
     <div class="hint">
       💡 راه سریع‌تر: توی هر سایتی متن رو انتخاب کن، راست‌کلیک کن و «نمایش راست‌چین» رو بزن
     </div>
@@ -210,17 +210,19 @@
   <!-- بخش ۴: بارگذاری فایل md از آدرس یا از سیستم -->
   <div class="section">
     <div class="label">📥 بارگذاری فایل md</div>
-    <input type="url" id="mdUrlInput" placeholder="https://... یا http://localhost:PORT/file.md">
+    <input type="text" id="mdUrlInput" placeholder="آدرس اینترنتی یا مسیر کامل فایل مثل E:\docs\file.md">
     <button class="primary" id="loadMdUrl">بارگذاری و نمایش</button>
     <input type="file" id="mdFileInput" accept=".md,.markdown,.txt" style="display:none">
     <button class="primary" id="loadMdFile" style="margin-top:8px; background:#555">📂 انتخاب فایل از سیستم</button>
     <input type="file" id="mdFolderInput" webkitdirectory multiple style="display:none">
     <button class="primary" id="loadMdFolder" style="margin-top:8px; background:#555">🗂️ انتخاب پوشه</button>
-    <div class="hint">برای فایل‌های روی سیستمت (مثل E:\...) از این دکمه‌ها استفاده کن؛ مسیر فایل مستقیم پشتیبانی نمی‌شه. با «انتخاب پوشه» یک تب جدید باز می‌شه و فهرست فایل‌های md اونجا در هدر نشون داده می‌شه</div>
+    <div class="hint">مسیر کامل فایل را وارد کن یا پوشهٔ پروژه را انتخاب کن تا تصاویر و لینک‌های نسبی هم در دسترس باشند. برای مسیر مستقیم فایل، گزینهٔ Allow access to file URLs باید در جزئیات افزونه فعال باشد.</div>
   </div>
 
   <div class="footer">تغییرات فوراً اعمال میشه — بدون رفرش</div>
 
+  <script src="source-paths.js"></script>
+  <script src="adjacent-tabs.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

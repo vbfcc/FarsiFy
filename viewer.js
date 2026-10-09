@@ -58,8 +58,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.storage.local.get(
   { viewerText: "", viewerPreview: false, viewerFileName: "", selectedFont: "Vazirmatn", pendingFolderFiles: [] },
   (data) => {
-    if (data.viewerText) {
+    const hasSource = new URLSearchParams(location.search).has("src") || new URLSearchParams(location.search).has("handle");
+    if (data.viewerText && !hasSource) {
       content.textContent = data.viewerText;
+      DocumentResources.set({ name: data.viewerFileName });
       if (data.viewerFileName) setCurrentFileName(data.viewerFileName);
       // بعد از نمایش، پاکش کن که دفعه بعد تب خالی باز بشه
       chrome.storage.local.remove(["viewerText", "viewerPreview", "viewerFileName"]);
@@ -68,13 +70,13 @@ chrome.storage.local.get(
     const font = data.selectedFont === "system" ? "Vazirmatn" : data.selectedFont;
     fontSelect.value = font;
     applyFont(font);
-    if (data.viewerText && data.viewerPreview) {
+    if (data.viewerText && data.viewerPreview && !hasSource) {
       setPreviewMode(true);
-    } else {
+    } else if (!hasSource) {
       content.focus();
     }
     // پوشه‌ای که از پاپ‌آپ انتخاب شده: فهرستش رو در هدر همین تب نشون بده
-    if (data.pendingFolderFiles && data.pendingFolderFiles.length) {
+    if (!hasSource && data.pendingFolderFiles && data.pendingFolderFiles.length) {
       folderFiles = data.pendingFolderFiles;
       activeFolderFileIdx = -1;
       renderFileHeader();
@@ -263,17 +265,30 @@ function renderCodeBlockHtml(lang, code) {
 }
 
 function renderInline(escapedText) {
-  let t = escapedText;
-  t = t.replace(/`([^`]+?)`/g, '<code>$1</code>');
+  // Protect code and generated HTML so emphasis never modifies paths or attributes.
+  const tokens = [];
+  const store = (html) => { tokens.push(html); return `\x00INLINE${tokens.length - 1}\x00`; };
+  const decode = (text) => text.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  let t = escapedText.replace(/`([^`]+?)`/g, (_, code) => store(`<code>${code}</code>`));
+  t = t.replace(/(!?)\[([^\]]*)\]\((<[^>]*>|&lt;[\s\S]*?&gt;|(?:[^\s()]|\([^()]*\))+)(?:\s+&quot;([\s\S]*?)&quot;)?\)/g,
+    (match, image, label, destination, title) => {
+      let path = decode(destination);
+      if (path.startsWith("<") && path.endsWith(">")) path = path.slice(1, -1);
+      const href = DocumentResources.link(path);
+      if (!href) return store(label); // Unsafe schemes never reach an href or src.
+      const attrs = `href="${escapeHtml(href)}" data-reference="${escapeHtml(path)}" target="_blank" rel="noopener noreferrer"`;
+      const titleAttr = title ? ` title="${title}"` : "";
+      if (image || SourcePaths.isImage(path)) {
+        return store(`<a ${attrs}${titleAttr}><img class="document-image" data-source="${escapeHtml(path)}" alt="${label}"${titleAttr} loading="lazy"></a>`);
+      }
+      const restoredLabel = label.replace(/\x00INLINE(\d+)\x00/g, (_, index) => tokens[Number(index)]);
+      return store(`<a ${attrs}${titleAttr}>${restoredLabel}</a>`);
+    });
   t = t.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
   t = t.replace(/__([^_]+?)__/g, "<strong>$1</strong>");
   t = t.replace(/\*([^*]+?)\*/g, "<em>$1</em>");
   t = t.replace(/(^|[^\w])_([^_]+?)_(?!\w)/g, "$1<em>$2</em>");
-  t = t.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-  );
-  return t;
+  return t.replace(/\x00INLINE(\d+)\x00/g, (_, index) => tokens[Number(index)]);
 }
 
 // جدول‌های مارک‌داون: | سلول | سلول | ... با ردیف جداکننده‌ی |---|---|
@@ -308,6 +323,8 @@ function renderMarkdown(raw) {
       return ` CB${idx} `;
     }
   );
+  // Remove direction wrappers after protecting code examples containing these tags.
+  working = working.replace(/^\s*<div\s+dir=["'](?:rtl|ltr)["']\s*>\s*$/gim, "").replace(/^\s*<\/div>\s*$/gim, "");
 
   // بخش‌های [ltr]...[/ltr] (متنی که کاربر با تولبار انتخاب علامت زده) رو هم
   // جدا نگه می‌داریم تا escapeHtml و پردازش خط‌به‌خط بهشون کاری نداشته باشه
@@ -324,6 +341,14 @@ function renderMarkdown(raw) {
   html = html.replace(/\x00LTR(\d+)\x00/g, (match, idx) => {
     const inner = renderLtrContent(ltrBlocks[Number(idx)], codeBlocks);
     return `<span class="ltr-inline" dir="ltr">${inner}</span>`;
+  });
+
+  const headingIds = new Map();
+  html = html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, inner) => {
+    const slug = inner.replace(/<[^>]+>/g, "").replace(/&[a-z#\d]+;/gi, "").trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
+    const count = headingIds.get(slug) || 0;
+    headingIds.set(slug, count + 1);
+    return `<h${level} id="${escapeHtml(slug + (count ? `-${count}` : ""))}">${inner}</h${level}>`;
   });
 
   return html;
@@ -345,11 +370,65 @@ function renderLtrContent(text, codeBlocks) {
     .join("");
 }
 
+function listMarker(line) {
+  const match = line.match(/^( *)([-+*]|\d+[.)]) +(.*)$/);
+  if (!match) return null;
+  return {
+    indent: match[1].length,
+    contentIndent: line.length - match[3].length,
+    type: /^\d/.test(match[2]) ? "ol" : "ul",
+    start: parseInt(match[2], 10),
+    text: match[3]
+  };
+}
+
+// Keep continuation paragraphs and nested lists inside their parent list item.
+function renderList(lines, start, codeBlocks) {
+  const first = listMarker(lines[start]);
+  const items = [];
+  let index = start;
+  while (index < lines.length) {
+    const marker = listMarker(lines[index]);
+    if (!marker || marker.indent !== first.indent || marker.type !== first.type) break;
+    const itemLines = [marker.text];
+    index++;
+    while (index < lines.length) {
+      const line = lines[index];
+      if (!line.trim()) {
+        let next = index + 1;
+        while (next < lines.length && !lines[next].trim()) next++;
+        const nextMarker = listMarker(lines[next] || "");
+        if (nextMarker?.indent === first.indent) { index = next; break; }
+        const nextIndent = (lines[next] || "").match(/^ */)[0].length;
+        if (next < lines.length && nextIndent >= marker.contentIndent) {
+          itemLines.push("");
+          index++;
+          continue;
+        }
+        break;
+      }
+      const nextMarker = listMarker(line);
+      if (nextMarker && nextMarker.indent <= first.indent) break;
+      const indent = line.match(/^ */)[0].length;
+      if (indent >= marker.contentIndent) {
+        itemLines.push(line.slice(marker.contentIndent));
+      } else {
+        // Markdown permits an unindented continuation of a list paragraph.
+        if (nextMarker || /^(?:#{1,6}\s|>|-{3,}\s*$|\*{3,}\s*$|_{3,}\s*$| *CB\d+ *$)/.test(line)) break;
+        itemLines.push(line);
+      }
+      index++;
+    }
+    items.push(`<li>${processLines(itemLines, codeBlocks).join("\n")}</li>`);
+  }
+  const startAttr = first.type === "ol" && first.start !== 1 ? ` start="${first.start}"` : "";
+  return { html: `<${first.type}${startAttr}>${items.join("")}</${first.type}>`, next: index };
+}
+
 // روی یک آرایه از خط‌ها پردازش می‌کنه؛ برای محتوای داخل blockquote هم بازگشتی صدا زده میشه
 // تا لیست/پاراگراف تودرتوی داخل نقل‌قول هم درست رندر بشه
 function processLines(lines, codeBlocks) {
   const html = [];
-  let list = null; // { type: 'ul' | 'ol', items: [], start }
   let para = [];
   let quoteBuf = null; // خط‌های خام (بدون escape) داخل یک بلاک نقل‌قول چندخطی
 
@@ -357,14 +436,6 @@ function processLines(lines, codeBlocks) {
     if (para.length) {
       html.push(`<p>${para.join("<br>")}</p>`);
       para = [];
-    }
-  }
-  function flushList() {
-    if (list) {
-      const items = list.items.map((i) => `<li>${i}</li>`).join("");
-      const startAttr = list.type === "ol" && list.start && list.start !== 1 ? ` start="${list.start}"` : "";
-      html.push(`<${list.type}${startAttr}>${items}</${list.type}>`);
-      list = null;
     }
   }
   function flushQuote() {
@@ -378,10 +449,9 @@ function processLines(lines, codeBlocks) {
   for (let idx = 0; idx < lines.length; idx++) {
     const rawLine = lines[idx];
 
-    const cb = rawLine.match(/^ CB(\d+) $/);
+    const cb = rawLine.match(/^ *CB(\d+) *$/);
     if (cb) {
       flushPara();
-      flushList();
       flushQuote();
       const { lang, code } = codeBlocks[Number(cb[1])];
       html.push(renderCodeBlockHtml(lang, code));
@@ -392,7 +462,6 @@ function processLines(lines, codeBlocks) {
     const quoteMatch = rawLine.match(/^\s{0,3}>\s?(.*)$/);
     if (quoteMatch) {
       flushPara();
-      flushList();
       if (!quoteBuf) quoteBuf = [];
       quoteBuf.push(quoteMatch[1]);
       continue;
@@ -407,7 +476,6 @@ function processLines(lines, codeBlocks) {
       isTableSeparatorRow(lines[idx + 1])
     ) {
       flushPara();
-      flushList();
       const headerCells = splitTableRow(rawLine);
       const aligns = splitTableRow(lines[idx + 1]);
       idx += 2;
@@ -439,48 +507,32 @@ function processLines(lines, codeBlocks) {
 
     if (trimmed === "") {
       flushPara();
-      flushList();
       continue;
     }
 
     let m;
     if ((m = trimmed.match(/^(#{1,6})\s+(.*)$/))) {
       flushPara();
-      flushList();
       const level = m[1].length;
       html.push(`<h${level}>${renderInline(m[2])}</h${level}>`);
       continue;
     }
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
       flushPara();
-      flushList();
       html.push("<hr>");
       continue;
     }
-    if ((m = trimmed.match(/^[-*]\s+(.*)$/))) {
+    if (listMarker(rawLine)) {
       flushPara();
-      if (!list || list.type !== "ul") {
-        flushList();
-        list = { type: "ul", items: [] };
-      }
-      list.items.push(renderInline(m[1]));
-      continue;
-    }
-    if ((m = trimmed.match(/^(\d+)\.\s+(.*)$/))) {
-      flushPara();
-      if (!list || list.type !== "ol") {
-        flushList();
-        list = { type: "ol", items: [], start: Number(m[1]) };
-      }
-      list.items.push(renderInline(m[2]));
+      const list = renderList(lines, idx, codeBlocks);
+      html.push(list.html);
+      idx = list.next - 1;
       continue;
     }
 
-    flushList();
     para.push(renderInline(line));
   }
   flushPara();
-  flushList();
   flushQuote();
 
   return html;
@@ -490,12 +542,13 @@ function processLines(lines, codeBlocks) {
 function setPreviewMode(isPreview) {
   previewMode = isPreview;
   if (isPreview) {
-    preview.innerHTML = renderMarkdown(content.innerText);
+    preview.innerHTML = DocumentResources.render(content.innerText);
     content.classList.add("hidden");
     preview.classList.add("visible");
     previewBtn.textContent = "✏️ ویرایش متن";
     previewBtn.classList.add("active");
     hideSelToolbar();
+    DocumentResources.hydrate(preview);
   } else {
     content.classList.remove("hidden");
     preview.classList.remove("visible");
@@ -529,6 +582,8 @@ printBtn.addEventListener("click", () => window.print());
 
 clearBtn.addEventListener("click", () => {
   content.textContent = "";
+  DocumentResources.set({});
+  setAddressParams({});
   if (previewMode) setPreviewMode(true);
   setCurrentFileName(null);
   activeFolderFileIdx = -1;
@@ -554,19 +609,24 @@ async function fetchAndLoadUrl(href, { updateAddress = true } = {}) {
   loadUrlBtn.textContent = "⏳ در حال بارگذاری...";
 
   try {
-    const res = await fetch(href, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+    const ref = SourcePaths.resolve(href);
+    if (!ref || ref.kind !== "url") throw new Error("آدرس نامعتبر است.");
+    const file = await DocumentResources.fileFor(ref);
+    const text = SourcePaths.isImage(ref.url) ? "" : await file.text();
+    const params = new URLSearchParams(location.search);
+    const target = updateAddress ? { ...ref, anchor: ref.fragment } : { line: params.get("line") || ref.line, endLine: params.get("endLine") || ref.endLine, column: params.get("column") || ref.column, anchor: params.get("anchor") || ref.fragment };
+    DocumentResources.set({ url: ref.url, name: fileNameFromUrl(new URL(ref.url)) }, target);
     content.textContent = text;
     setPreviewMode(true);
-    setCurrentFileName(fileNameFromUrl(new URL(href)));
+    setCurrentFileName(fileNameFromUrl(new URL(ref.url)));
     currentFolderHandleId = null;
     activeFolderFileIdx = -1;
     renderFileHeader();
-    if (updateAddress) setAddressParams({ src: href });
+    if (updateAddress) setAddressParams(Object.fromEntries(new URLSearchParams(SourcePaths.viewerParams(ref))));
     showToast("فایل با موفقیت بارگذاری شد ✅");
     return true;
   } catch (err) {
+    DocumentResources.warn(err.message);
     showToast(`بارگذاری ناموفق بود ❌ (${err.message || "خطای شبکه"})`);
     return false;
   } finally {
@@ -579,26 +639,15 @@ async function loadFromUrl() {
   const raw = urlInput.value.trim();
   if (!raw) return;
 
-  // مسیرهای فایل ویندوزی مثل E:\... یا \\server\share\... یا file:///
-  const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(raw) || /^\\\\/.test(raw);
-  if (isWindowsPath || raw.startsWith("file:")) {
-    showToast("مسیر فایل سیستم پشتیبانی نمی‌شه؛ محتوای فایل رو کپی و پیست کن ❌");
-    return;
-  }
-
   let parsed;
   try {
-    parsed = new URL(raw);
+    const ref = SourcePaths.parseReference(raw);
+    parsed = SourcePaths.inputUrl(ref.path);
+    await fetchAndLoadUrl(parsed.href + (ref.line ? `#L${ref.line}${ref.endLine !== ref.line ? `-L${ref.endLine}` : ""}${ref.column ? `:${ref.column}` : ""}` : ref.fragment ? "#" + ref.fragment : ""));
   } catch {
     showToast("آدرس نامعتبره ❌");
     return;
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    showToast("فقط آدرس‌های http:// و https:// پشتیبانی می‌شن ❌");
-    return;
-  }
-
-  await fetchAndLoadUrl(parsed.href);
 }
 
 loadUrlBtn.addEventListener("click", loadFromUrl);
@@ -650,6 +699,7 @@ async function loadLocalFileHandle(handle, existingId = null) {
   try {
     const file = await handle.getFile();
     const text = await file.text();
+    DocumentResources.set({ fileHandle: handle, name: file.name });
     content.textContent = text;
     setPreviewMode(true);
     setCurrentFileName(file.name);
@@ -670,6 +720,9 @@ mdFileInput.addEventListener("change", async () => {
   if (!file) return;
   try {
     const text = await file.text();
+    DocumentResources.set({ name: file.name });
+    setAddressParams({});
+    currentFolderHandleId = null;
     content.textContent = text;
     setPreviewMode(true);
     setCurrentFileName(file.name);
@@ -689,6 +742,8 @@ mdFileInput.addEventListener("change", async () => {
 let folderFiles = []; // { label, text } یا { label, handle } (وقتی از File System Access میاد)
 let activeFolderFileIdx = -1;
 let currentFolderHandleId = null; // شناسه‌ی هندلِ پوشه‌ی جاری در IndexedDB (اگه از این مسیر بارگذاری شده باشه)
+let currentFolderRoot = null;
+let currentFolderKind = "dir";
 
 loadFolderBtn.addEventListener("click", () => {
   if (supportsFsAccess) pickLocalFolder();
@@ -721,7 +776,7 @@ async function collectMdEntries(dirHandle, prefix = "") {
   return out;
 }
 
-async function loadLocalFolderHandle(dirHandle, handleId, { activateLabel = null } = {}) {
+async function loadLocalFolderHandle(dirHandle, handleId, { activateLabel = null, target = {} } = {}) {
   const ok = await ensureReadPermission(dirHandle);
   if (!ok) {
     showToast("اجازه‌ی خواندن پوشه داده نشد ❌");
@@ -737,6 +792,16 @@ async function loadLocalFolderHandle(dirHandle, handleId, { activateLabel = null
     entries.sort((a, b) => a.label.localeCompare(b.label, "fa"));
     folderFiles = entries;
     currentFolderHandleId = handleId;
+    currentFolderRoot = dirHandle;
+    currentFolderKind = "dir";
+
+    // A link may target any file, even when it is not in the Markdown index.
+    if (activateLabel) {
+      const idxToLoad = folderFiles.findIndex((f) => f.label === activateLabel);
+      renderFileHeader();
+      await loadFolderDocument(activateLabel, target, idxToLoad);
+      return;
+    }
 
     if (!folderFiles.length) {
       showToast("هیچ فایل .md ای در این پوشه پیدا نشد ❌");
@@ -749,12 +814,7 @@ async function loadLocalFolderHandle(dirHandle, handleId, { activateLabel = null
     renderFileHeader();
     setAddressParams({ kind: "dir", handle: handleId });
 
-    const idxToLoad = activateLabel ? folderFiles.findIndex((f) => f.label === activateLabel) : -1;
-    if (idxToLoad !== -1) {
-      await loadFolderFileInline(idxToLoad);
-    } else {
-      showToast(`${folderFiles.length} فایل .md پیدا شد ✅`);
-    }
+    showToast(`${folderFiles.length} فایل .md پیدا شد ✅`);
   } catch (err) {
     showToast(`خواندن فایل‌ها ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   } finally {
@@ -786,18 +846,14 @@ mdFolderInput.addEventListener("change", async () => {
   loadFolderBtn.textContent = "⏳ در حال خواندن فایل‌ها...";
 
   try {
-    folderFiles = await Promise.all(
-      mdFiles.map(async (file) => {
-        const rel = file.webkitRelativePath || file.name;
-        // پوشه‌ی ریشه رو از مسیر حذف کن تا فقط مسیر نسبی داخل پوشه نشون داده بشه
-        const slashIdx = rel.indexOf("/");
-        const label = slashIdx !== -1 ? rel.slice(slashIdx + 1) : rel;
-        return { label, text: await file.text() };
-      })
-    );
-    currentFolderHandleId = null;
-    activeFolderFileIdx = -1;
-    renderFileHeader();
+    const entries = all.map((file) => {
+      const rel = file.webkitRelativePath || file.name;
+      const slashIdx = rel.indexOf("/");
+      return { path: slashIdx !== -1 ? rel.slice(slashIdx + 1) : rel, file };
+    });
+    const id = genHandleId();
+    await saveHandle(id, entries);
+    await loadFolderBundle(entries, id);
     showToast(`${folderFiles.length} فایل .md پیدا شد ✅`);
   } catch (err) {
     showToast(`خواندن فایل‌ها ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
@@ -870,9 +926,44 @@ async function getEntryText(entry) {
   return entry.text;
 }
 
+async function loadFolderBundle(entries, id, { entry = null, target = {} } = {}) {
+  currentFolderRoot = entries;
+  currentFolderHandleId = id;
+  currentFolderKind = "bundle";
+  folderFiles = entries.filter((item) => SourcePaths.isMarkdown(item.path)).map((item) => ({ label: item.path }));
+  folderFiles.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+  activeFolderFileIdx = -1;
+  renderFileHeader();
+  if (entry) await loadFolderDocument(entry, target, folderFiles.findIndex((item) => item.label === entry));
+  else setAddressParams({ kind: "bundle", handle: id });
+}
+
+async function loadFolderDocument(entry, target = {}, idx = -1) {
+  const normalized = SourcePaths.folderPath("/" + entry, "", false);
+  const source = { root: currentFolderRoot, rootId: currentFolderHandleId, rootKind: currentFolderKind, entry: normalized, name: normalized };
+  const ref = { ...target, kind: "folder", rootId: source.rootId, rootKind: source.rootKind, entry: normalized };
+  try {
+    const file = await DocumentResources.fileFor(ref, source);
+    const text = SourcePaths.isImage(normalized) ? "" : await file.text();
+    DocumentResources.set(source, target);
+    content.textContent = text;
+    setCurrentFileName(normalized);
+    activeFolderFileIdx = idx;
+    renderFileHeader();
+    setAddressParams(Object.fromEntries(new URLSearchParams(SourcePaths.viewerParams(ref))));
+    setPreviewMode(true);
+  } catch (err) {
+    DocumentResources.warn(`خواندن فایل ناموفق بود: ${err.message}`);
+  }
+}
+
 async function loadFolderFileInline(idx) {
   const entry = folderFiles[idx];
   if (!entry) return;
+  if (currentFolderHandleId && currentFolderRoot) {
+    await loadFolderDocument(entry.label, {}, idx);
+    return;
+  }
   let text;
   try {
     text = await getEntryText(entry);
@@ -881,6 +972,7 @@ async function loadFolderFileInline(idx) {
     return;
   }
   content.textContent = text;
+  DocumentResources.set({ name: entry.label });
   setPreviewMode(true);
   setCurrentFileName(entry.label);
   activeFolderFileIdx = idx;
@@ -894,17 +986,17 @@ async function loadFolderFileInline(idx) {
 function openFolderFileInNewTab(idx) {
   const entry = folderFiles[idx];
   if (!entry) return;
-  if (entry.handle && currentFolderHandleId) {
+  if (currentFolderHandleId && currentFolderRoot) {
     const url =
       chrome.runtime.getURL("viewer.html") +
-      `?kind=dir&handle=${encodeURIComponent(currentFolderHandleId)}&entry=${encodeURIComponent(entry.label)}`;
-    chrome.tabs.create({ url });
+      `?kind=${currentFolderKind}&handle=${encodeURIComponent(currentFolderHandleId)}&entry=${encodeURIComponent(entry.label)}`;
+    AdjacentTabs.open(url);
     return;
   }
   chrome.storage.local.set(
     { viewerText: entry.text, viewerPreview: true, viewerFileName: entry.label },
     () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+      AdjacentTabs.open(chrome.runtime.getURL("viewer.html"));
     }
   );
 }
@@ -1127,6 +1219,8 @@ selCodeBtn.addEventListener("click", () => {
     await loadLocalFileHandle(handle, handleId);
   } else if (kind === "dir") {
     const entry = params.get("entry");
-    await loadLocalFolderHandle(handle, handleId, { activateLabel: entry || null });
+    await loadLocalFolderHandle(handle, handleId, { activateLabel: entry || null, target: { line: params.get("line"), endLine: params.get("endLine"), column: params.get("column"), anchor: params.get("anchor") } });
+  } else if (kind === "bundle") {
+    await loadFolderBundle(handle, handleId, { entry: params.get("entry"), target: { line: params.get("line"), endLine: params.get("endLine"), column: params.get("column"), anchor: params.get("anchor") } });
   }
 })();

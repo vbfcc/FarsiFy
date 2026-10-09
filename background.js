@@ -3,6 +3,8 @@
 // کارش: ساختن منوی راست‌کلیک برای باز کردن متن انتخاب‌شده به صورت راست‌چین
 // ============================================
 
+importScripts("adjacent-tabs.js");
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "open-rtl-viewer",
@@ -11,11 +13,11 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info) => {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "open-rtl-viewer" && info.selectionText) {
     // متن انتخاب‌شده رو ذخیره کن و صفحه نمایش رو باز کن
-    chrome.storage.local.set({ viewerText: info.selectionText }, () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") });
+    chrome.storage.local.set({ viewerText: info.selectionText, viewerPreview: true, viewerFileName: "" }, () => {
+      AdjacentTabs.open(chrome.runtime.getURL("viewer.html"), tab?.id);
     });
   }
 });

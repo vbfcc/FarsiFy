@@ -14,6 +14,10 @@ const DocumentResources = (() => {
     target = nextTarget;
     notice.hidden = true;
   }
+  function snapshot() {
+    const { root, ...persistedSource } = source;
+    return { source: persistedSource, target: { ...target } };
+  }
   function resetRender() {
     generation++;
     objectUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -179,7 +183,8 @@ const DocumentResources = (() => {
       const rootId = genHandleId();
       await saveHandle(rootId, root);
       set({ root, rootId, entry: parts.join("/"), name: context.name }, target);
-      setAddressParams(Object.fromEntries(new URLSearchParams(SourcePaths.viewerParams({ ...target, kind: "folder", rootId, rootKind: "dir", entry: parts.join("/") }))));
+      if (ReaderTools.isDraft()) await ReaderTools.save();
+      else setAddressParams(Object.fromEntries(new URLSearchParams(SourcePaths.viewerParams({ ...target, kind: "folder", rootId, rootKind: "dir", entry: parts.join("/") }))));
       setPreviewMode(true);
     } catch (err) {
       if (err.name !== "AbortError") warn(err.message, true);
@@ -212,5 +217,5 @@ const DocumentResources = (() => {
   document.getElementById("preview").addEventListener("click", handleLink);
   document.getElementById("preview").addEventListener("auxclick", handleLink);
   window.addEventListener("pagehide", resetRender);
-  return { set, render, hydrate, link, fileFor, warn };
+  return { set, snapshot, render, hydrate, link, fileFor, warn };
 })();

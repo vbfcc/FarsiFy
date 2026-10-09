@@ -12,6 +12,7 @@
     throw new Error('Timed out waiting for rendered images');
   };
   try {
+    await viewerReady;
     if (location.protocol === 'file:') {
       check(preview.classList.contains('visible') && content.classList.contains('hidden'), 'Pasted text opens directly in Markdown reading mode');
     }
@@ -29,6 +30,48 @@
     check(content.innerText === window.pastedStory && !content.classList.contains('hidden'), 'Editing preserves the original Markdown text');
     previewBtn.click();
     check(preview.querySelector('ol').children.length === 6, 'Returning to reading mode restores formatted text');
+    const outline = document.getElementById('outline');
+    const outlineList = document.getElementById('outlineList');
+    check(!outline.hidden && outlineList.querySelectorAll('a').length === 2, 'Reading mode shows a linked table of contents for Persian headings');
+    const headingLink = outlineList.querySelectorAll('a')[1];
+    headingLink.click();
+    check(document.getElementById(headingLink.dataset.headingId)?.textContent === headingLink.textContent && headingLink.getAttribute('aria-current') === 'location', 'Outline links target the correct heading and mark the selected section');
+    document.getElementById('outlineBtn').click();
+    check(outline.hidden, 'The outline can be hidden');
+    document.getElementById('outlineBtn').click();
+    check(!outline.hidden, 'The outline can be shown again');
+    content.textContent = '# تکراری\n\n## تکراری\n\n## 😀';
+    await setPreviewMode(true);
+    check(new Set(Array.from(outlineList.querySelectorAll('a'), (link) => link.dataset.headingId)).size === 3, 'Repeated and emoji-only headings have separate usable outline targets');
+
+    const taskDocument = '# کارها\n\n- [ ] تکراری\n- [x] تکراری\n  - [ ] زیرکار\n\n```md\n- [ ] فقط نمونهٔ کد\n```';
+    content.textContent = taskDocument;
+    await setPreviewMode(true);
+    check(preview.querySelectorAll('.task-checkbox').length === 3 && preview.querySelector('pre code').textContent === '- [ ] فقط نمونهٔ کد', 'Nested task lists render controls while checklist examples inside code stay literal');
+    preview.querySelectorAll('.task-checkbox')[1].click();
+    await ReaderTools.flush();
+    check(content.innerText === taskDocument.replace('- [x] تکراری', '- [ ] تکراری'), 'Toggling a repeated task updates only the correct Markdown marker');
+    const taskId = new URLSearchParams(location.search).get('draft');
+    check((await ViewerDrafts.load(taskId)).text === content.innerText, 'Checklist edits are persisted in the document draft');
+    await ReaderTools.restore(taskId);
+    check(!preview.querySelectorAll('.task-checkbox')[1].checked, 'Restoring a saved draft retains checklist state');
+    content.textContent += '\n\nآخرین تغییر';
+    content.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    check(ViewerDrafts.recovery(taskId)?.text.endsWith('آخرین تغییر'), 'The latest edit has a synchronous recovery copy before asynchronous storage completes');
+    await ReaderTools.flush();
+    document.getElementById('clearBtn').click();
+    await ReaderTools.flush();
+    check((await ViewerDrafts.load(taskId)).text === '' && !preview.classList.contains('visible') && outline.hidden, 'Clearing a document saves the empty state and returns to editing');
+
+    content.textContent = '```js\nconst message = "سلام";\n\nconsole.log(message);\n```';
+    await setPreviewMode(true);
+    let clipboardValue = null;
+    const originalWrite = navigator.clipboard.writeText;
+    navigator.clipboard.writeText = async (value) => { clipboardValue = value; };
+    preview.querySelector('.copy-code-btn').click();
+    await waitUntil(() => clipboardValue !== null);
+    check(clipboardValue === 'const message = "سلام";\n\nconsole.log(message);', 'The code copy button copies raw code with blank lines and no formatting or language label');
+    navigator.clipboard.writeText = originalWrite;
     preview.innerHTML = renderMarkdown('3. Third\n\n4. Fourth\n   - Nested\n     1. Deep\n\nParagraph\n\n> **Quote**\n> - item\n\n| A | B |\n|---|---|\n| x | y |');
     check(preview.querySelector('ol').start === 3 && preview.querySelector('ol').children.length === 2 && preview.querySelector('ol ul ol li')?.textContent === 'Deep', 'Numbered list starts and multiple nesting levels survive blank lines');
     check(preview.querySelector('blockquote strong')?.textContent === 'Quote' && preview.querySelector('table td')?.textContent === 'x', 'Quotes and tables still render alongside lists');
@@ -121,6 +164,14 @@
       check(preview.querySelectorAll('img').length === 15, 'All 15 real QA document image links load from their original files');
       check(!preview.textContent.includes('<div dir="rtl">'), 'Common RTL wrapper does not show as literal document text');
     }
+    await loadFolderBundle(entries, 'test-bundle', { entry: 'docs/qa.md' });
+    content.textContent += '\n\n- [x] تمام شد\n\n```js\nconst html = "<script>unsafe</script>";\n```';
+    window.exportedTestHtml = await StandaloneExport.build();
+    const exported = new DOMParser().parseFromString(window.exportedTestHtml, 'text/html');
+    check(exported.querySelector('img').getAttribute('src').startsWith('data:image/svg+xml;base64,'), 'Standalone HTML embeds document images instead of temporary blob URLs');
+    check(exported.querySelector('style').textContent.includes('base64,') && !window.exportedTestHtml.includes('chrome-extension://') && !exported.querySelector('script'), 'Standalone HTML embeds fonts and contains no extension scripts or URLs');
+    check(exported.querySelector('.task-checkbox').hasAttribute('checked') && exported.querySelector('.task-checkbox').disabled && !exported.querySelector('.copy-code-btn'), 'Export retains checklist state and omits editing controls');
+    check(exported.querySelector('.export-outline a').getAttribute('href') === '#sample' && exported.querySelector('pre code').textContent.includes('<script>unsafe</script>'), 'Export retains heading navigation and safely displays literal code');
     document.getElementById('testResult').textContent = JSON.stringify({ passed: true, checks: results });
   } catch (err) {
     document.getElementById('testResult').textContent = JSON.stringify({ passed: false, checks: results, error: err.stack });

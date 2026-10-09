@@ -9,9 +9,14 @@ function setup({ current, active, get } = {}) {
   const created = [];
   const elements = new Map();
   const saved = {};
+  const documents = [];
   const context = vm.createContext({
     URL, URLSearchParams, console,
     window: {},
+    ViewerDrafts: { create: async (document) => {
+      documents.push(document);
+      return `chrome-extension://test/viewer.html?draft=${documents.length}`;
+    } },
     document: { getElementById(id) {
       if (!elements.has(id)) elements.set(id, {
         value: '', files: [], textContent: '',
@@ -38,7 +43,7 @@ function setup({ current, active, get } = {}) {
     alert: (message) => { throw new Error(message); }
   });
   for (const name of ['adjacent-tabs.js', 'source-paths.js']) vm.runInContext(fs.readFileSync(path.join(root, name), 'utf8'), context);
-  return { context, created, elements, saved };
+  return { context, created, elements, saved, documents };
 }
 
 test('source ID uses its latest position, even when another tab becomes active', async () => {
@@ -69,7 +74,7 @@ test('popup text, URL, file and folder flows all open beside the invocation tab'
   // Only persistence and native OS pickers are substituted; run the production handlers.
   vm.runInContext('saveHandle = async () => {};', state.context);
   state.elements.get('pasteArea').value = '## عنوان\n\n**بولد**';
-  state.elements.get('openViewer').click();
+  await state.elements.get('openViewer').click();
   state.elements.get('mdUrlInput').value = 'E:\\docs\\story.md';
   state.elements.get('loadMdUrl').click();
   state.elements.get('mdFileInput').files = [{ name: 'story.md', text: async () => '**متن**' }];
@@ -87,5 +92,7 @@ test('popup text, URL, file and folder flows all open beside the invocation tab'
     assert.equal(options.windowId, 8);
     assert.equal(options.openerTabId, 42);
   }
-  assert.equal(state.saved.viewerPreview, true);
+  assert.equal(state.documents[0].preview, true);
+  assert.equal(state.documents[0].text, '## عنوان\n\n**بولد**');
+  assert.equal(state.documents[1].name, 'story.md');
 });

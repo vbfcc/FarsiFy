@@ -54,37 +54,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// ---------- متن ذخیره‌شده رو بخون و نشون بده ----------
-chrome.storage.local.get(
-  { viewerText: "", viewerPreview: false, viewerFileName: "", selectedFont: "Vazirmatn", pendingFolderFiles: [] },
-  (data) => {
-    const hasSource = new URLSearchParams(location.search).has("src") || new URLSearchParams(location.search).has("handle");
-    if (data.viewerText && !hasSource) {
-      content.textContent = data.viewerText;
-      DocumentResources.set({ name: data.viewerFileName });
-      if (data.viewerFileName) setCurrentFileName(data.viewerFileName);
-      // بعد از نمایش، پاکش کن که دفعه بعد تب خالی باز بشه
-      chrome.storage.local.remove(["viewerText", "viewerPreview", "viewerFileName"]);
-    }
-    // فونت پیش‌فرض همون فونتی باشه که کاربر انتخاب کرده
-    const font = data.selectedFont === "system" ? "Vazirmatn" : data.selectedFont;
-    fontSelect.value = font;
-    applyFont(font);
-    if (data.viewerText && data.viewerPreview && !hasSource) {
-      setPreviewMode(true);
-    } else if (!hasSource) {
-      content.focus();
-    }
-    // پوشه‌ای که از پاپ‌آپ انتخاب شده: فهرستش رو در هدر همین تب نشون بده
-    if (!hasSource && data.pendingFolderFiles && data.pendingFolderFiles.length) {
-      folderFiles = data.pendingFolderFiles;
-      activeFolderFileIdx = -1;
-      renderFileHeader();
-      chrome.storage.local.remove(["pendingFolderFiles"]);
-    }
-  }
-);
-
 function applyFont(font) {
   const family = `'${font}', Tahoma, sans-serif`;
   content.style.fontFamily = family;
@@ -128,6 +97,7 @@ function fileNameFromUrl(parsedUrl) {
 // رفرش کردن همون تب، آخرین نسخه‌ی سند از همون منبع دوباره خونده بشه
 // ============================================
 function setAddressParams(params) {
+  ReaderTools.addressChanged(params);
   const qs = new URLSearchParams(params).toString();
   history.replaceState(null, "", qs ? `${location.pathname}?${qs}` : location.pathname);
 }
@@ -313,6 +283,7 @@ function cellAlignAttr(marker) {
 }
 
 function renderMarkdown(raw) {
+  raw = TaskLists.prepare(raw);
   // بلاک‌های کد فنس‌شده رو جدا نگه می‌داریم تا پردازش‌های بعدی روشون اثر نذاره
   const codeBlocks = [];
   let working = raw.replace(
@@ -345,7 +316,7 @@ function renderMarkdown(raw) {
 
   const headingIds = new Map();
   html = html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, inner) => {
-    const slug = inner.replace(/<[^>]+>/g, "").replace(/&[a-z#\d]+;/gi, "").trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
+    const slug = inner.replace(/<[^>]+>/g, "").replace(/&[a-z#\d]+;/gi, "").trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-") || "section";
     const count = headingIds.get(slug) || 0;
     headingIds.set(slug, count + 1);
     return `<h${level} id="${escapeHtml(slug + (count ? `-${count}` : ""))}">${inner}</h${level}>`;
@@ -390,7 +361,8 @@ function renderList(lines, start, codeBlocks) {
   while (index < lines.length) {
     const marker = listMarker(lines[index]);
     if (!marker || marker.indent !== first.indent || marker.type !== first.type) break;
-    const itemLines = [marker.text];
+    const task = marker.text.match(/^\x00TASK(\d+):([01])\x00\s*(.*)$/);
+    const itemLines = [task ? task[3] : marker.text];
     index++;
     while (index < lines.length) {
       const line = lines[index];
@@ -419,7 +391,10 @@ function renderList(lines, start, codeBlocks) {
       }
       index++;
     }
-    items.push(`<li>${processLines(itemLines, codeBlocks).join("\n")}</li>`);
+    const inner = processLines(itemLines, codeBlocks).join("\n");
+    if (task) {
+      items.push(`<li class="task-item"><input type="checkbox" class="task-checkbox" data-task-offset="${task[1]}"${task[2] === "1" ? " checked" : ""} aria-label="${escapeHtml(task[3] || "تغییر وضعیت مورد")}"><div class="task-body">${inner}</div></li>`);
+    } else items.push(`<li>${inner}</li>`);
   }
   const startAttr = first.type === "ol" && first.start !== 1 ? ` start="${first.start}"` : "";
   return { html: `<${first.type}${startAttr}>${items.join("")}</${first.type}>`, next: index };
@@ -548,17 +523,22 @@ function setPreviewMode(isPreview) {
     previewBtn.textContent = "✏️ ویرایش متن";
     previewBtn.classList.add("active");
     hideSelToolbar();
-    DocumentResources.hydrate(preview);
+    ReaderTools.decorate();
+    return DocumentResources.hydrate(preview);
   } else {
     content.classList.remove("hidden");
     preview.classList.remove("visible");
     previewBtn.textContent = "👁️ پیش‌نمایش مارک‌داون";
     previewBtn.classList.remove("active");
     content.focus();
+    ReaderTools.updateOutline();
   }
 }
 
-previewBtn.addEventListener("click", () => setPreviewMode(!previewMode));
+previewBtn.addEventListener("click", () => {
+  setPreviewMode(!previewMode);
+  if (ReaderTools.isDraft()) ReaderTools.save();
+});
 
 // ---------- کنترل‌ها ----------
 fontSelect.addEventListener("change", () => applyFont(fontSelect.value));
@@ -581,14 +561,16 @@ copyBtn.addEventListener("click", async () => {
 printBtn.addEventListener("click", () => window.print());
 
 clearBtn.addEventListener("click", () => {
+  const existingDraft = new URLSearchParams(location.search).get("draft");
   content.textContent = "";
   DocumentResources.set({});
-  setAddressParams({});
+  setAddressParams(existingDraft ? { draft: existingDraft } : {});
   if (previewMode) setPreviewMode(true);
   setCurrentFileName(null);
   activeFolderFileIdx = -1;
   renderFileHeader();
-  content.focus();
+  setPreviewMode(false);
+  ReaderTools.save();
 });
 
 // وقتی paste میشه، فقط متن ساده بیاد (بدون استایل‌های سایت مبدا)
@@ -656,12 +638,6 @@ urlInput.addEventListener("keydown", (e) => {
 });
 
 // صفحه با ?src=<آدرس> باز شده (بارگذاری اولیه یا رفرش تبی که قبلاً از یک URL بارگذاری شده بود)
-(function initFromSrcParam() {
-  const src = new URLSearchParams(location.search).get("src");
-  if (!src) return;
-  urlInput.value = src;
-  fetchAndLoadUrl(src, { updateAddress: false });
-})();
 
 // ---------- بارگذاری فایل .md از سیستم (فایل‌های لوکال) ----------
 // جایی که File System Access API هست (مرورگرهای کرومیومی) از اون استفاده می‌کنیم
@@ -729,6 +705,7 @@ mdFileInput.addEventListener("change", async () => {
     activeFolderFileIdx = -1;
     renderFileHeader();
     showToast("فایل با موفقیت بارگذاری شد ✅");
+    await ReaderTools.save();
   } catch (err) {
     showToast(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   } finally {
@@ -993,12 +970,9 @@ function openFolderFileInNewTab(idx) {
     AdjacentTabs.open(url);
     return;
   }
-  chrome.storage.local.set(
-    { viewerText: entry.text, viewerPreview: true, viewerFileName: entry.label },
-    () => {
-      AdjacentTabs.open(chrome.runtime.getURL("viewer.html"));
-    }
-  );
+  ViewerDrafts.create({ text: entry.text, preview: true, name: entry.label })
+    .then((url) => AdjacentTabs.open(url))
+    .catch((error) => showToast(`باز کردن متن ناموفق بود: ${error.message}`));
 }
 
 // ============================================
@@ -1177,6 +1151,7 @@ function wrapSelectionText(transform) {
   hideSelToolbar();
   // بلافاصله نتیجه‌ی رندرشده را نشان بده تا تغییر ظاهر در همان لحظه دیده شود
   setPreviewMode(true);
+  ReaderTools.save();
 }
 
 selLtrBtn.addEventListener("click", () => {
@@ -1198,11 +1173,37 @@ selCodeBtn.addEventListener("click", () => {
 // صفحه با ?kind=file|dir&handle=<id> باز شده: یعنی این تب قبلاً یک فایل/پوشه‌ی
 // لوکال رو با File System Access API بارگذاری کرده بود و الان (بارگذاری اولیه
 // یا رفرش) باید همون هندل رو از IndexedDB برداره و آخرین نسخه رو از دیسک بخونه
-(async function initFromHandleParams() {
+const viewerReady = (async function initializeViewer() {
+  const defaults = await new Promise((resolve) => chrome.storage.local.get(
+    { selectedFont: "Vazirmatn", viewerText: "", viewerPreview: false, viewerFileName: "", pendingFolderFiles: [] }, resolve));
+  fontSelect.value = defaults.selectedFont === "system" ? "Vazirmatn" : defaults.selectedFont;
+  applyFont(fontSelect.value);
   const params = new URLSearchParams(location.search);
+  if (params.has("draft")) {
+    await ReaderTools.restore(params.get("draft"));
+    return;
+  }
+  if (params.has("src")) {
+    urlInput.value = params.get("src");
+    await fetchAndLoadUrl(urlInput.value, { updateAddress: false });
+    return;
+  }
   const kind = params.get("kind");
   const handleId = params.get("handle");
-  if (!kind || !handleId) return;
+  if (!kind || !handleId) {
+    // Migrate the old one-shot handoff without discarding existing pasted text.
+    content.textContent = defaults.viewerText;
+    DocumentResources.set({ name: defaults.viewerFileName });
+    setCurrentFileName(defaults.viewerFileName);
+    await setPreviewMode(!!defaults.viewerText && !!defaults.viewerPreview);
+    if (defaults.pendingFolderFiles.length) {
+      folderFiles = defaults.pendingFolderFiles;
+      renderFileHeader();
+    }
+    await ReaderTools.save();
+    chrome.storage.local.remove(["viewerText", "viewerPreview", "viewerFileName", "pendingFolderFiles"]);
+    return;
+  }
 
   let handle;
   try {
@@ -1223,4 +1224,7 @@ selCodeBtn.addEventListener("click", () => {
   } else if (kind === "bundle") {
     await loadFolderBundle(handle, handleId, { entry: params.get("entry"), target: { line: params.get("line"), endLine: params.get("endLine"), column: params.get("column"), anchor: params.get("anchor") } });
   }
-})();
+})().catch((error) => {
+  document.getElementById("saveStatus").textContent = "بارگذاری یا ذخیره ناموفق بود";
+  showToast(error.message || "بارگذاری متن ناموفق بود.");
+});

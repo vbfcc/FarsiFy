@@ -81,11 +81,11 @@ rtlToggle.addEventListener("change", saveTabSettings);
 fontSelect.addEventListener("change", saveTabSettings);
 
 // ---------- باز کردن متن در تب جدید ----------
-openViewerBtn.addEventListener("click", () => {
+openViewerBtn.addEventListener("click", async () => {
   const text = pasteArea.value.trim();
-  chrome.storage.local.set({ viewerText: text, viewerPreview: true, viewerFileName: "" }, () => {
-    openAdjacentViewer(chrome.runtime.getURL("viewer.html"));
-  });
+  try {
+    await openAdjacentViewer(await ViewerDrafts.create({ text, preview: !!text, name: "" }));
+  } catch (error) { alert(`ذخیره و باز کردن متن ناموفق بود: ${error.message}`); }
 });
 
 // دکمه Enter + Ctrl هم کار کنه
@@ -187,9 +187,7 @@ mdFileInput.addEventListener("change", async () => {
   if (!file) return;
   try {
     const text = await file.text();
-    chrome.storage.local.set({ viewerText: text, viewerPreview: true, viewerFileName: file.name }, () => {
-      openAdjacentViewer(chrome.runtime.getURL("viewer.html"));
-    });
+    await openAdjacentViewer(await ViewerDrafts.create({ text, preview: true, name: file.name }));
   } catch (err) {
     alert(`خواندن فایل ناموفق بود ❌ (${err.message || "خطای ناشناخته"})`);
   } finally {

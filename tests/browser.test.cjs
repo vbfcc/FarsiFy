@@ -112,7 +112,7 @@ try {
         openViewerBtn.click();
         for (let i = 0; i < 100; i++) {
           const tabs = await chrome.tabs.query({ windowId: ${origin.windowId} });
-          const result = tabs.find((tab) => tab.openerTabId === ${origin.id} && tab.url === chrome.runtime.getURL('viewer.html'));
+          const result = tabs.find((tab) => tab.openerTabId === ${origin.id} && tab.url?.startsWith(chrome.runtime.getURL('viewer.html') + '?draft='));
           if (result) return { result, origin: await chrome.tabs.get(${origin.id}) };
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
@@ -145,7 +145,103 @@ try {
     assert.equal(rendered.result.value.questions, 6);
     assert.equal(rendered.result.value.rawHidden, true);
     console.log('Real popup: adjacent tab placement and automatic Persian Markdown rendering passed.');
+
+    const edit = await send('Runtime.evaluate', {
+      expression: `(async () => {
+        await viewerReady;
+        content.textContent += '\\n\\n- [ ] یادآوری';
+        await setPreviewMode(true);
+        preview.querySelector('.task-checkbox').click();
+        await ReaderTools.flush();
+        fontSelect.value = 'Shabnam';
+        fontSelect.dispatchEvent(new Event('change'));
+        sizeRange.value = '22';
+        sizeRange.dispatchEvent(new Event('input'));
+        content.textContent += '\\n\\nحفظ فوری';
+        content.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        return content.innerText;
+      })()`, awaitPromise: true, returnByValue: true
+    }, viewerSession);
+    assert.ok(!edit.exceptionDetails, JSON.stringify(edit.exceptionDetails));
+    const editedText = edit.result.value;
+    await send('Page.reload', {}, viewerSession);
+    const waitForViewer = async (session) => {
+      for (let i = 0; i < 100; i++) {
+        try {
+          const ready = await send('Runtime.evaluate', { expression: 'typeof viewerReady !== "undefined" && document.readyState === "complete"', returnByValue: true }, session);
+          if (ready.result?.value) {
+            const result = await send('Runtime.evaluate', { expression: '(async () => { await viewerReady; return { text: content.innerText, checked: preview.querySelector(".task-checkbox")?.checked, font: fontSelect.value, size: sizeRange.value, url: location.href }; })()', awaitPromise: true, returnByValue: true }, session);
+            assert.ok(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
+            return result.result.value;
+          }
+        } catch (error) { if (i === 99) throw error; }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error('Viewer did not initialize');
+    };
+    const restored = await waitForViewer(viewerSession);
+    assert.equal(restored.text, editedText, 'Immediate reload keeps the latest text edit');
+    assert.equal(restored.checked, true, 'Reload keeps checklist state');
+    assert.equal(restored.font, 'Shabnam');
+    assert.equal(restored.size, '22');
+    const second = await send('Runtime.evaluate', {
+      expression: `(async () => {
+        const url = await ViewerDrafts.create({ text: '# متن دوم\\n\\nمستقل', preview: true, name: '' });
+        const tab = await chrome.tabs.create({ url, active: false });
+        return { url, id: tab.id };
+      })()`, awaitPromise: true, returnByValue: true
+    }, sessionId);
+    assert.ok(!second.exceptionDetails, JSON.stringify(second.exceptionDetails));
+    const secondTarget = (await send('Target.getTargets')).targetInfos.find((target) => target.url === second.result.value.url);
+    const secondSession = (await send('Target.attachToTarget', { targetId: secondTarget.targetId, flatten: true })).sessionId;
+    const independent = await waitForViewer(secondSession);
+    assert.equal(independent.text, '# متن دوم\n\nمستقل');
+    assert.notEqual(independent.url, restored.url);
+    assert.equal((await waitForViewer(viewerSession)).text, editedText, 'Opening a second document does not replace the first document');
+    await send('Target.closeTarget', { targetId: viewerTarget.targetId });
+    const reopened = await send('Target.createTarget', { url: restored.url });
+    const reopenedSession = (await send('Target.attachToTarget', { targetId: reopened.targetId, flatten: true })).sessionId;
+    assert.equal((await waitForViewer(reopenedSession)).text, editedText, 'A closed viewer can reopen its saved document');
+    console.log('Drafts: immediate reload, checklist and font settings, independent tabs, and closed-tab recovery passed.');
   }
+
+  const exported = await send('Runtime.evaluate', { expression: 'window.exportedTestHtml', returnByValue: true }, sessionId);
+  assert.ok(exported.result.value, 'Standalone export was built');
+  const standalonePath = path.join(temporary, 'standalone.html');
+  fs.writeFileSync(standalonePath, exported.result.value);
+  // A separate browser context prevents the installed extension's content
+  // stylesheet from injecting additional font faces into the standalone page.
+  const standaloneContext = await send('Target.createBrowserContext');
+  const standalone = await send('Target.createTarget', { url: 'about:blank', browserContextId: standaloneContext.browserContextId });
+  const standaloneSession = (await send('Target.attachToTarget', { targetId: standalone.targetId, flatten: true })).sessionId;
+  await send('Network.enable', {}, standaloneSession);
+  await send('Network.setBlockedURLs', { urls: ['http://*', 'https://*', 'chrome-extension://*'] }, standaloneSession);
+  await send('Page.navigate', { url: pathToFileURL(standalonePath).href }, standaloneSession);
+  const offline = await send('Runtime.evaluate', {
+    expression: `(async () => {
+      for (let i = 0; i < 100; i++) {
+        if (document.querySelector('#preview img')?.naturalWidth === 40) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      await document.fonts.ready;
+      return {
+        image: document.querySelector('#preview img')?.naturalWidth,
+        heading: document.querySelector('#preview h1')?.textContent,
+        font: document.fonts.check('18px Vazirmatn'),
+        loadedFaces: Array.from(document.fonts).filter((font) => font.status === 'loaded').length,
+        checked: document.querySelector('.task-checkbox')?.checked,
+        scripts: document.querySelectorAll('script').length
+      };
+    })()`, awaitPromise: true, returnByValue: true
+  }, standaloneSession);
+  assert.ok(!offline.exceptionDetails, JSON.stringify(offline.exceptionDetails));
+  assert.equal(offline.result.value.image, 40, 'Exported image loads without extension or network resources');
+  assert.equal(offline.result.value.heading, 'Sample');
+  assert.equal(offline.result.value.font, true);
+  assert.ok(offline.result.value.loadedFaces >= 1, 'Embedded Persian font loads offline');
+  assert.equal(offline.result.value.checked, true);
+  assert.equal(offline.result.value.scripts, 0);
+  console.log('Standalone HTML: embedded images, Persian fonts, checklist state, and script-free reading passed offline.');
   await send('Browser.close');
   await new Promise((resolve) => { if (child.exitCode !== null) resolve(); else child.once('exit', resolve); });
 } finally {

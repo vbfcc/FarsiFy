@@ -2,6 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>متن راست‌چین</title>
   <style>
     @font-face { font-family: 'Vazirmatn'; src: url('fonts/Vazirmatn-Regular.woff2') format('woff2'); font-weight: normal; }
@@ -343,6 +344,51 @@
       padding: 40px 48px;
       min-height: 400px;
     }
+    .document-layout {
+      width: calc(100% - 32px);
+      max-width: 800px;
+      margin: 28px auto 60px;
+    }
+    .document-layout .page { margin: 0; min-width: 0; }
+    .document-layout.has-outline {
+      max-width: 1100px;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 800px);
+      gap: 24px;
+      align-items: start;
+    }
+    .outline {
+      position: sticky;
+      top: calc(var(--header-height, 150px) + 16px);
+      max-height: calc(100vh - var(--header-height, 150px) - 32px);
+      overflow-y: auto;
+      background: var(--page-bg);
+      border: 1px solid var(--toolbar-border);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .outline[hidden] { display: none; }
+    .outline-title { font-weight: 700; margin-bottom: 10px; }
+    .outline a { display: block; padding: 6px 10px; color: var(--sub-text); text-decoration: none; border-radius: 6px; }
+    .outline a:hover, .outline a[aria-current] { background: var(--code-bg); color: var(--link-color); }
+    #preview :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: calc(var(--header-height, 150px) + 16px); }
+    .save-status { font-size: 11px; color: var(--sub-text); }
+    button:disabled { opacity: .55; cursor: default; }
+    .code-panel { position: relative; margin-bottom: .9em; padding-top: 34px; }
+    .code-panel .copy-code-btn { position: absolute; inset-inline-end: 0; top: 0; padding: 3px 10px; font-size: 11px; user-select: none; }
+    #preview .code-panel pre { margin-bottom: 0; }
+    #preview .task-item { display: flex; gap: .6em; align-items: flex-start; list-style: none; }
+    .task-checkbox { flex: 0 0 auto; width: 18px; height: 18px; margin: .65em 0 0; accent-color: var(--accent); cursor: pointer; }
+    .task-body { flex: 1; min-width: 0; }
+    #preview .task-body > :last-child { margin-bottom: 0; }
+    #preview .task-item:has(> input:checked) > .task-body > p:first-child { text-decoration: line-through; color: var(--sub-text); }
+    @media (max-width: 900px) {
+      .document-layout.has-outline { display: block; max-width: 800px; }
+      .outline { position: static; max-height: 240px; margin-bottom: 16px; }
+      .document-layout .page { padding: 24px; }
+    }
     #content, #preview {
       direction: rtl;
       text-align: right;
@@ -574,7 +620,9 @@
 
     /* موقع پرینت فقط متن چاپ بشه، همیشه با تم روشن */
     @media print {
-      .toolbar, .file-header, .perm-banner, .toast { display: none !important; }
+      .toolbar, .file-header, .perm-banner, .toast, .outline, .copy-code-btn { display: none !important; }
+      .document-layout, .document-layout.has-outline { display: block; width: 100%; max-width: 100%; margin: 0; }
+      .code-panel { padding-top: 0; }
       body { background: #fff !important; color: #1c1c1e !important; }
       .page { box-shadow: none; margin: 0; max-width: 100%; border-radius: 0; background: #fff !important; }
       #content, #preview { color: #1c1c1e !important; }
@@ -612,7 +660,10 @@
       <button id="previewBtn">👁️ پیش‌نمایش مارک‌داون</button>
       <button id="copyBtn">📋 کپی متن</button>
       <button id="printBtn">🖨️ چاپ / PDF</button>
+      <button id="outlineBtn" aria-controls="outline" aria-expanded="false" disabled>☰ فهرست تیترها</button>
+      <button id="exportHtmlBtn">📥 خروجی HTML</button>
       <button class="accent" id="clearBtn">🗑️ پاک کردن</button>
+      <span id="saveStatus" class="save-status" role="status" aria-live="polite"></span>
       <div class="control file-current" id="currentFileControl">
         <span>📄 در حال خواندن:</span>
         <span id="currentFileName" class="current-file-name"></span>
@@ -647,9 +698,15 @@
     </div>
   </div>
 
-  <div class="page">
-    <div id="content" contenteditable="true"></div>
-    <div id="preview" dir="rtl"></div>
+  <div class="document-layout" id="documentLayout">
+    <aside class="outline" id="outline" hidden>
+      <div class="outline-title">فهرست تیترها</div>
+      <nav id="outlineList" aria-label="فهرست تیترهای سند"></nav>
+    </aside>
+    <main class="page">
+      <div id="content" contenteditable="true" role="textbox" aria-label="متن سند" aria-multiline="true"></div>
+      <div id="preview" dir="rtl"></div>
+    </main>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -661,7 +718,11 @@
 
   <script src="source-paths.js"></script>
   <script src="adjacent-tabs.js"></script>
+  <script src="viewer-drafts.js"></script>
+  <script src="task-lists.js"></script>
   <script src="viewer-resources.js"></script>
+  <script src="reader-tools.js"></script>
+  <script src="viewer-export.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

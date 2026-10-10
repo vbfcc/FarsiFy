@@ -336,7 +336,7 @@
 
     /* برگه متن */
     .page {
-      max-width: 800px;
+      max-width: 100%;
       margin: 28px auto 60px;
       background: var(--page-bg);
       border-radius: 14px;
@@ -346,14 +346,12 @@
     }
     .document-layout {
       width: calc(100% - 32px);
-      max-width: 800px;
       margin: 28px auto 60px;
     }
     .document-layout .page { margin: 0; min-width: 0; }
     .document-layout.has-outline {
-      max-width: 1100px;
       display: grid;
-      grid-template-columns: 220px minmax(0, 800px);
+      grid-template-columns: 220px minmax(0, 1fr);
       gap: 24px;
       align-items: start;
     }
@@ -385,7 +383,7 @@
     #preview .task-body > :last-child { margin-bottom: 0; }
     #preview .task-item:has(> input:checked) > .task-body > p:first-child { text-decoration: line-through; color: var(--sub-text); }
     @media (max-width: 900px) {
-      .document-layout.has-outline { display: block; max-width: 800px; }
+      .document-layout.has-outline { display: block; }
       .outline { position: static; max-height: 240px; margin-bottom: 16px; }
       .document-layout .page { padding: 24px; }
     }

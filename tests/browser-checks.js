@@ -93,6 +93,19 @@
     preview.innerHTML = renderMarkdown('```html\n<div dir="rtl">\nexample\n</div>\n```');
     check(preview.querySelector('pre code').textContent.includes('<div dir="rtl">'), 'RTL direction wrappers inside code examples remain literal');
 
+    preview.innerHTML = renderMarkdown('[section](#topic-1)\n\n<a id="topic-1"></a>\n\n## Topic 1\n\n[name](#legacy)\n\n<a name=\'legacy\'></a>\n\n`<a id="literal"></a>`\n\n<a id="unsafe" onclick="alert(1)"></a>');
+    const sectionTarget = preview.querySelector('[id="topic-1"]');
+    check(sectionTarget && preview.querySelector('[id="legacy"]') && !preview.textContent.includes('<a id="topic-1">'), 'Empty id and name anchors render as usable section destinations');
+    check(!preview.querySelector('[id="literal"], [id="unsafe"], [onclick]') && preview.querySelector('code').textContent.includes('<a id="literal">'), 'Code anchors stay literal and anchors with extra attributes remain escaped');
+    let scrolledSection = false;
+    sectionTarget.scrollIntoView = () => { scrolledSection = true; };
+    const sectionLink = preview.querySelector('a[data-reference="#topic-1"]');
+    const sectionEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    sectionLink.dispatchEvent(sectionEvent);
+    check(scrolledSection && sectionEvent.defaultPrevented && !sectionLink.hasAttribute('target'), 'Document index clicks scroll to the explicit destination in the current tab');
+    preview.innerHTML = renderMarkdown('<a id="topic-1"></a>\n\n## Topic 1\n\n## Topic 1');
+    check(new Set(Array.from(preview.querySelectorAll('[id]'), (el) => el.id)).size === 3, 'Heading IDs avoid collisions with explicit section anchors');
+
     const entries = [
       { path: 'docs/qa.md', file: new File(['# Sample\n\n[photo](../assets/screen.svg)\n\n[code](../app/test.js:3)\n\n[doc](other.md#target-heading)'], 'qa.md') },
       { path: 'docs/other.md', file: new File(['# Target heading\n\ntext'], 'other.md') },
@@ -160,8 +173,21 @@
     if (window.sampleDocumentUrl) {
       await fetchAndLoadUrl(window.sampleDocumentUrl);
       preview.querySelectorAll('img').forEach((img) => { img.loading = 'eager'; });
-      await waitUntil(() => preview.querySelectorAll('img').length > 0 && Array.from(preview.querySelectorAll('img')).every((img) => img.complete && img.naturalWidth > 0));
-      check(preview.querySelectorAll('img').length === 15, 'All 15 real QA document image links load from their original files');
+      if (preview.querySelector('img')) {
+        await waitUntil(() => Array.from(preview.querySelectorAll('img')).every((img) => img.complete && img.naturalWidth > 0));
+        check(preview.querySelectorAll('img').length === 15, 'All 15 real QA document image links load from their original files');
+      }
+      const sectionLinks = Array.from(preview.querySelectorAll('a[data-reference^="#"]'));
+      for (const link of sectionLinks) {
+        const destination = preview.querySelector(`#${CSS.escape(decodeURIComponent(link.dataset.reference.slice(1)))}`);
+        check(!!destination, 'Real document section link resolves: ' + link.dataset.reference);
+        let scrolled = false;
+        const originalScroll = destination.scrollIntoView;
+        destination.scrollIntoView = () => { scrolled = true; };
+        link.click();
+        destination.scrollIntoView = originalScroll;
+        check(scrolled, 'Real document section click reaches: ' + link.dataset.reference);
+      }
       check(!preview.textContent.includes('<div dir="rtl">'), 'Common RTL wrapper does not show as literal document text');
     }
     await loadFolderBundle(entries, 'test-bundle', { entry: 'docs/qa.md' });

@@ -12,10 +12,32 @@ test('Windows and UNC paths preserve Unicode, spaces, # and percent characters',
   assert.equal(paths.inputUrl('\\\\server\\share\\my doc.md').href, 'file://server/share/my%20doc.md');
 });
 
+test('Windows paths accept one extra slash before the drive letter', () => {
+  for (const input of [
+    '/E:/factorland_localhost/docs/ideas/ai-assistant/INDEX.md',
+    '  /E:\\factorland_localhost\\docs\\ideas\\ai-assistant\\INDEX.md  '
+  ]) {
+    const expected = 'file:///E:/factorland_localhost/docs/ideas/ai-assistant/INDEX.md';
+    assert.equal(paths.inputUrl(input).href, expected);
+    for (const source of [{}, { url: 'https://example.org/docs/qa.md' }, { rootId: 'root', entry: 'docs/qa.md' }]) {
+      const result = paths.resolve(input, source);
+      assert.equal(result.kind, 'url');
+      assert.equal(result.url, expected);
+      assert.equal(new URLSearchParams(paths.viewerParams(result)).get('src'), expected);
+    }
+  }
+  assert.equal(paths.inputUrl('/e:/docs/نام #1 50%.md').href, 'file:///e:/docs/%D9%86%D8%A7%D9%85%20%231%2050%25.md');
+  const ref = paths.resolve('/E:/docs/INDEX.md#L12-L20');
+  assert.equal(ref.url, 'file:///E:/docs/INDEX.md');
+  assert.equal(ref.line, 12);
+  assert.equal(ref.endLine, 20);
+});
+
 test('relative URLs resolve against the source document', () => {
   const result = paths.resolve('../assets/test.png', { url: 'file:///E:/project/docs/qa.md' });
   assert.equal(result.url, 'file:///E:/project/assets/test.png');
   assert.equal(paths.resolve('image_name.png', { url: 'https://example.org/docs/qa.md' }).url, 'https://example.org/docs/image_name.png');
+  assert.equal(paths.resolve('/docs/INDEX.md', { url: 'https://example.org/nested/qa.md' }).url, 'https://example.org/docs/INDEX.md');
 });
 
 test('line, line range, and column syntax survives viewer navigation', () => {

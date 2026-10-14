@@ -240,13 +240,17 @@ function renderInline(escapedText) {
   const store = (html) => { tokens.push(html); return `\x00INLINE${tokens.length - 1}\x00`; };
   const decode = (text) => text.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   let t = escapedText.replace(/`([^`]+?)`/g, (_, code) => store(`<code>${code}</code>`));
+  // Accept only empty named anchors, never arbitrary HTML or extra attributes.
+  t = t.replace(/&lt;a\s+(?:id|name)\s*=\s*(?:&quot;([^\s<>]*?)&quot;|&#39;([^\s<>]*?)&#39;)\s*&gt;\s*&lt;\/a\s*&gt;/gi,
+    (_, id, name) => store(`<a id="${escapeHtml(decode(id ?? name))}"></a>`));
   t = t.replace(/(!?)\[([^\]]*)\]\((<[^>]*>|&lt;[\s\S]*?&gt;|(?:[^\s()]|\([^()]*\))+)(?:\s+&quot;([\s\S]*?)&quot;)?\)/g,
     (match, image, label, destination, title) => {
       let path = decode(destination);
       if (path.startsWith("<") && path.endsWith(">")) path = path.slice(1, -1);
       const href = DocumentResources.link(path);
       if (!href) return store(label); // Unsafe schemes never reach an href or src.
-      const attrs = `href="${escapeHtml(href)}" data-reference="${escapeHtml(path)}" target="_blank" rel="noopener noreferrer"`;
+      const target = path.startsWith("#") ? "" : ' target="_blank" rel="noopener noreferrer"';
+      const attrs = `href="${escapeHtml(href)}" data-reference="${escapeHtml(path)}"${target}`;
       const titleAttr = title ? ` title="${title}"` : "";
       if (image || SourcePaths.isImage(path)) {
         return store(`<a ${attrs}${titleAttr}><img class="document-image" data-source="${escapeHtml(path)}" alt="${label}"${titleAttr} loading="lazy"></a>`);
@@ -315,11 +319,15 @@ function renderMarkdown(raw) {
   });
 
   const headingIds = new Map();
+  const usedIds = new Set(Array.from(html.matchAll(/<a id="([^"]*)"><\/a>/g), (match) => match[1]));
   html = html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, inner) => {
     const slug = inner.replace(/<[^>]+>/g, "").replace(/&[a-z#\d]+;/gi, "").trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-") || "section";
-    const count = headingIds.get(slug) || 0;
+    let count = headingIds.get(slug) || 0;
+    let id = slug + (count ? `-${count}` : "");
+    while (usedIds.has(escapeHtml(id))) id = `${slug}-${++count}`;
     headingIds.set(slug, count + 1);
-    return `<h${level} id="${escapeHtml(slug + (count ? `-${count}` : ""))}">${inner}</h${level}>`;
+    usedIds.add(escapeHtml(id));
+    return `<h${level} id="${escapeHtml(id)}">${inner}</h${level}>`;
   });
 
   return html;

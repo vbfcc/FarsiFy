@@ -163,7 +163,7 @@ const DocumentResources = (() => {
     if (!id) return;
     let decoded;
     try { decoded = decodeURIComponent(id); } catch { decoded = id; }
-    const el = document.getElementById(decoded);
+    const el = document.getElementById("preview").querySelector(`#${CSS.escape(decoded)}`);
     if (el) el.scrollIntoView({ block: "center" });
     else if (target.line) warn(`خط ${target.line} در این فایل وجود ندارد.`);
   }
@@ -209,7 +209,7 @@ const DocumentResources = (() => {
         } else {
           let id;
           try { id = decodeURIComponent(ref.fragment); } catch { id = ref.fragment; }
-          document.getElementById(id)?.scrollIntoView({ block: "start" });
+          document.getElementById("preview").querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: "start" });
         }
       }
     } catch (err) { event.preventDefault(); warn(err.message); }

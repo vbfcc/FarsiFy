@@ -1,7 +1,8 @@
 // Shared by the popup and viewer. Never resolve document links against the extension URL.
 const SourcePaths = (() => {
   function inputUrl(value) {
-    const raw = value.trim();
+    // Some copied Windows paths include a slash before the drive letter.
+    const raw = value.trim().replace(/^\/(?=[a-z]:[\\/])/i, "");
     if (/^[a-z]:[\\/]/i.test(raw)) {
       const path = raw.replace(/\\/g, "/");
       return new URL("file:///" + path.split("/").map((part, i) => i === 0 ? part : encodeURIComponent(part)).join("/"));
@@ -69,7 +70,7 @@ const SourcePaths = (() => {
     if (!ref.path) return { ...ref, kind: "anchor" };
     if (/^(?:javascript|data|vbscript|blob):/i.test(ref.path)) return null;
     if (/^mailto:/i.test(ref.path)) return { ...ref, kind: "external", url: ref.path };
-    const absolute = /^[a-z]:[\\/]/i.test(ref.path) || /^\\\\/.test(ref.path) || /^[a-z][a-z\d+.-]*:/i.test(ref.path);
+    const absolute = /^\/?[a-z]:[\\/]/i.test(ref.path) || /^\\\\/.test(ref.path) || /^[a-z][a-z\d+.-]*:/i.test(ref.path);
     if (absolute || source.url) {
       try {
         const url = absolute ? inputUrl(ref.path) : new URL(ref.path.replace(/\\/g, "/"), source.url);
